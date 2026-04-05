@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% set active_page = 'compare' %}
+
+{% block title %}Comparative Analysis — AdvDefense{% endblock %}
+{% block meta_description %}Comparative analysis of adversarial defenses: heatmaps, charts, and detailed metrics across all attack-defense combinations{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+    <h1>📊 Comparative Analysis</h1>
+    <p>Full evaluation of 4 attacks × 5 defenses — visualized with interactive charts and heatmaps</p>
+</div>
+
+<div id="comparison-content" style="position:relative; min-height:400px;" class="fade-in-up">
+
+    <!-- Attack Success Rate Heatmap -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <div class="card-icon pink">🔥</div>
+            <div>
+                <div class="card-title">Attack Success Rate Heatmap</div>
+                <div class="card-subtitle">% of correctly classified images that become misclassified — lower is better for defense</div>
+            </div>
+        </div>
+        <div id="heatmap-container" class="heatmap-container">
+            <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid-2" style="margin-bottom: 1.5rem;">
+        <!-- Bar Chart -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon blue">📊</div>
+                <div>
+                    <div class="card-title">Robust Accuracy</div>
+                    <div class="card-subtitle">Model accuracy under each attack</div>
+                </div>
+            </div>
+            <div class="chart-container" style="height: 350px;">
+                <canvas id="bar-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Radar Chart -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon green">🎯</div>
+                <div>
+                    <div class="card-title">Defense Comparison</div>
+                    <div class="card-subtitle">Clean accuracy vs average robust accuracy</div>
+                </div>
+            </div>
+            <div class="chart-container" style="height: 350px;">
+                <canvas id="radar-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Metrics Table -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <div class="card-icon purple">📋</div>
+            <div>
+                <div class="card-title">Detailed Metrics</div>
+                <div class="card-subtitle">Complete results for all attack-defense combinations</div>
+            </div>
+        </div>
+        <div id="metrics-table-container">
+            <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+    </div>
+
+    <!-- Key Findings -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+            <div class="card-icon amber">💡</div>
+            <div>
+                <div class="card-title">Key Findings</div>
+                <div class="card-subtitle">Understanding the results</div>
+            </div>
+        </div>
+        <div class="grid-2">
+            <div>
+                <h3 style="font-size: 0.95rem; color: var(--accent-blue); margin-bottom: 0.75rem;">
+                    🤖 ML Attacks (Gradient-Based)
+                </h3>
+                <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 2; padding-left: 1.2rem;">
+                    <li><strong>FGSM</strong> — Fast but less powerful; single gradient step</li>
+                    <li><strong>PGD</strong> — Strongest white-box attack; iterative optimization</li>
+                    <li>Both require gradient access (white-box setting)</li>
+                    <li>Can be blocked by gradient masking (but EC attacks bypass this)</li>
+                </ul>
+            </div>
+            <div>
+                <h3 style="font-size: 0.95rem; color: var(--accent-cyan); margin-bottom: 0.75rem;">
+                    🧬 EC Attacks (Gradient-Free)
+                </h3>
+                <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 2; padding-left: 1.2rem;">
+                    <li><strong>Genetic Algorithm</strong> — Population-based search, gradient-free</li>
+                    <li><strong>Differential Evolution</strong> — Continuous optimization in reduced space</li>
+                    <li>Black-box attacks — only need model outputs</li>
+                    <li>Can bypass gradient-masking defenses (distillation)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section-divider" style="margin: 1.5rem 0;"></div>
+
+        <div class="grid-2">
+            <div>
+                <h3 style="font-size: 0.95rem; color: var(--accent-amber); margin-bottom: 0.75rem;">
+                    🛡️ Defense Effectiveness
+                </h3>
+                <ul style="font-size: 0.85rem; color: var(--text-secondary); line-height: 2; padding-left: 1.2rem;">
+                    <li><strong>Adversarial Training</strong> — Generally most robust defense</li>
+                    <li><strong>Input Transformation</strong> — Easy to apply but adaptive attacks bypass it</li>
+                    <li><strong>Detection Network</strong> — Can catch known attacks but misses novel ones</li>
+                    <li><strong>Distillation</strong> — Smooths gradients but EC attacks bypass this</li>
+                </ul>
+            </div>
+            <div>
+                <h3 style="font-size: 0.95rem; color: var(--accent-rose); margin-bottom: 0.75rem;">
+                    ⚠️ Key Takeaway
+                </h3>
+                <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.8;">
+                    <p style="margin-bottom: 0.75rem;">
+                        <strong>No single defense is sufficient.</strong> Gradient-masking defenses
+                        (distillation, input transformation) can be bypassed by gradient-free EC attacks
+                        that don't rely on gradient information.
+                    </p>
+                    <p>
+                        <strong>Adversarial Training</strong> provides the most consistent defense across
+                        both ML and EC attack types, but comes at the cost of higher training time and
+                        slightly reduced clean accuracy.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="height: 4rem;"></div>
+{% endblock %}

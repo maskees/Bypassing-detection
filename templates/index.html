@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% set active_page = 'home' %}
+
+{% block title %}AdvDefense — Adversarial Defense Analysis{% endblock %}
+{% block meta_description %}A comparative analysis platform for adversarial defenses in deep learning using Evolutionary Computation and Machine Learning{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<section class="hero fade-in">
+    <h1>
+        <span class="gradient-text">Bypassing Detection</span><br>
+        Adversarial Defense Analysis
+    </h1>
+    <p class="subtitle">
+        A comparative analysis of adversarial defenses in deep learning using
+        <strong>Evolutionary Computation</strong> and <strong>Machine Learning</strong> attack methods.
+    </p>
+    <div class="hero-actions">
+        <a href="/attack" class="btn btn-primary btn-lg">⚡ Attack Lab</a>
+        <a href="/compare" class="btn btn-secondary btn-lg">📊 View Comparison</a>
+    </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- Attack Methods -->
+<section class="fade-in-up">
+    <div class="page-header" style="margin-bottom: 2rem;">
+        <h1 style="font-size: 1.8rem;">Attack Methods</h1>
+        <p>Four adversarial attacks — two gradient-based (ML) and two evolutionary (EC)</p>
+    </div>
+
+    <div class="features-grid stagger">
+        <div class="card feature-card ml">
+            <div class="feature-icon">⚡</div>
+            <h3>FGSM</h3>
+            <p>Fast Gradient Sign Method — Single-step attack that perturbs inputs in the direction of the loss gradient. Fast but less powerful.</p>
+            <span class="tag ml">ML · Gradient-Based</span>
+        </div>
+
+        <div class="card feature-card ml">
+            <div class="feature-icon">🔄</div>
+            <h3>PGD</h3>
+            <p>Projected Gradient Descent — Iterative multi-step attack within an ε-ball. The gold standard for evaluating adversarial robustness.</p>
+            <span class="tag ml">ML · Gradient-Based</span>
+        </div>
+
+        <div class="card feature-card ec">
+            <div class="feature-icon">🧬</div>
+            <h3>Genetic Algorithm</h3>
+            <p>Population-based evolutionary attack using selection, crossover, and mutation. Gradient-free — bypasses gradient masking defenses.</p>
+            <span class="tag ec">EC · Gradient-Free</span>
+        </div>
+
+        <div class="card feature-card ec">
+            <div class="feature-icon">🔬</div>
+            <h3>Differential Evolution</h3>
+            <p>Continuous optimization in reduced-dimension space. Uses mutation/recombination to find adversarial perturbations without gradients.</p>
+            <span class="tag ec">EC · Gradient-Free</span>
+        </div>
+    </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- Defense Strategies -->
+<section class="fade-in-up">
+    <div class="page-header" style="margin-bottom: 2rem;">
+        <h1 style="font-size: 1.8rem;">Defense Strategies</h1>
+        <p>Four defense mechanisms — proactive and reactive approaches compared</p>
+    </div>
+
+    <div class="features-grid stagger">
+        <div class="card feature-card defense">
+            <div class="feature-icon">🛡️</div>
+            <h3>Adversarial Training</h3>
+            <p>Retrains the model with PGD-generated adversarial examples. Most effective known defense but computationally expensive.</p>
+            <span class="tag defense">Proactive · Retraining</span>
+        </div>
+
+        <div class="card feature-card defense">
+            <div class="feature-icon">🔄</div>
+            <h3>Input Transformation</h3>
+            <p>Pre-processes inputs with smoothing, bit-depth reduction, and compression to remove adversarial perturbations before classification.</p>
+            <span class="tag defense">Reactive · No Retraining</span>
+        </div>
+
+        <div class="card feature-card compare">
+            <div class="feature-icon">🔍</div>
+            <h3>Detection Network</h3>
+            <p>Binary classifier trained on CNN features to distinguish clean from adversarial inputs. Rejects detected attacks before classification.</p>
+            <span class="tag defense">Reactive · Detection</span>
+        </div>
+
+        <div class="card feature-card compare">
+            <div class="feature-icon">🧪</div>
+            <h3>Defensive Distillation</h3>
+            <p>Teacher-student training with temperature scaling. Smooths decision boundaries to reduce gradient magnitudes exploited by attackers.</p>
+            <span class="tag defense">Proactive · Distillation</span>
+        </div>
+    </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- How It Works -->
+<section class="fade-in-up">
+    <div class="page-header" style="margin-bottom: 2rem;">
+        <h1 style="font-size: 1.8rem;">How It Works</h1>
+        <p>The evaluation pipeline</p>
+    </div>
+
+    <div class="grid-3 stagger">
+        <div class="card" style="text-align: center; padding: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">1️⃣</div>
+            <h3 style="margin-bottom: 0.5rem; color: var(--accent-blue);">Train Models</h3>
+            <p style="font-size: 0.85rem; color: var(--text-secondary);">
+                Train a CNN on MNIST, then apply each defense strategy to create 4 defended variants.
+            </p>
+        </div>
+        <div class="card" style="text-align: center; padding: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">2️⃣</div>
+            <h3 style="margin-bottom: 0.5rem; color: var(--accent-purple);">Generate Attacks</h3>
+            <p style="font-size: 0.85rem; color: var(--text-secondary);">
+                Run all 4 attack methods against each defense to create a comprehensive attack-defense matrix.
+            </p>
+        </div>
+        <div class="card" style="text-align: center; padding: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">3️⃣</div>
+            <h3 style="margin-bottom: 0.5rem; color: var(--accent-cyan);">Analyze Results</h3>
+            <p style="font-size: 0.85rem; color: var(--text-secondary);">
+                Compare success rates, robust accuracy, perturbation metrics, and defense effectiveness visually.
+            </p>
+        </div>
+    </div>
+</section>
+
+<div style="height: 4rem;"></div>
+{% endblock %}

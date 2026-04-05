@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block meta_description %}Adversarial Defense Comparative Analysis using EC and ML{% endblock %}">
+    <title>{% block title %}Adversarial Defense Analysis{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="grid-bg"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">
+                <div class="logo-icon">⚔</div>
+                <div>
+                    <div class="brand-text">AdvDefense</div>
+                    <div class="brand-sub">EC × ML Analysis</div>
+                </div>
+            </a>
+            <ul class="nav-links">
+                <li><a href="/" class="{% if active_page == 'home' %}active{% endif %}">
+                    <span class="nav-icon">🏠</span> Dashboard
+                </a></li>
+                <li><a href="/attack" class="{% if active_page == 'attack' %}active{% endif %}">
+                    <span class="nav-icon">⚡</span> Attack Lab
+                </a></li>
+                <li><a href="/compare" class="{% if active_page == 'compare' %}active{% endif %}">
+                    <span class="nav-icon">📊</span> Comparison
+                </a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="/static/js/main.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

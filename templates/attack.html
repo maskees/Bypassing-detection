@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% set active_page = 'attack' %}
+
+{% block title %}Attack Lab — AdvDefense{% endblock %}
+{% block meta_description %}Interactive adversarial attack lab — run FGSM, PGD, Genetic Algorithm, and Differential Evolution attacks on MNIST{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in">
+    <h1>⚡ Attack Lab</h1>
+    <p>Generate adversarial examples interactively and see how defenses respond in real-time</p>
+</div>
+
+<div class="attack-lab fade-in-up">
+    <!-- Controls Panel -->
+    <div class="controls-panel">
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card-header">
+                <div class="card-icon blue">⚙</div>
+                <div>
+                    <div class="card-title">Attack Configuration</div>
+                    <div class="card-subtitle">Select attack type and parameters</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Attack Method</label>
+                <select id="attack-type" class="form-control">
+                    <option value="fgsm">⚡ FGSM (ML — Gradient)</option>
+                    <option value="pgd">🔄 PGD (ML — Iterative Gradient)</option>
+                    <option value="genetic">🧬 Genetic Algorithm (EC)</option>
+                    <option value="de">🔬 Differential Evolution (EC)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Epsilon (ε) — Perturbation Bound <span class="range-value" id="epsilon-value">0.30</span></label>
+                <input type="range" id="epsilon-slider" min="0.05" max="0.5" step="0.01" value="0.30">
+            </div>
+
+            <!-- PGD params -->
+            <div class="param-group" id="params-pgd" style="display:none;">
+                <div class="form-group">
+                    <label>PGD Steps</label>
+                    <input type="number" id="pgd-steps" class="form-control" value="40" min="5" max="200">
+                </div>
+            </div>
+
+            <!-- GA params -->
+            <div class="param-group" id="params-genetic" style="display:none;">
+                <div class="form-group">
+                    <label>Population Size</label>
+                    <input type="number" id="ga-pop-size" class="form-control" value="30" min="10" max="100">
+                </div>
+                <div class="form-group">
+                    <label>Generations</label>
+                    <input type="number" id="ga-generations" class="form-control" value="50" min="10" max="200">
+                </div>
+            </div>
+
+            <!-- DE params -->
+            <div class="param-group" id="params-de" style="display:none;">
+                <div class="form-group">
+                    <label>Max Iterations</label>
+                    <input type="number" id="de-maxiter" class="form-control" value="50" min="10" max="200">
+                </div>
+            </div>
+
+            <button id="run-attack-btn" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;" onclick="runAttack()">
+                ⚡ Run Attack
+            </button>
+        </div>
+
+        <!-- Image Selector -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon purple">🖼</div>
+                <div>
+                    <div class="card-title">Select Image</div>
+                    <div class="card-subtitle">Pick a test image from MNIST</div>
+                </div>
+            </div>
+            <div id="image-gallery" class="image-selector">
+                <div class="empty-state" style="grid-column: 1/-1; padding: 1rem;">
+                    <div class="spinner"></div>
+                    <p style="font-size:0.8rem; margin-top:0.5rem;">Loading images...</p>
+                </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="width:100%; margin-top: 0.75rem;" onclick="loadSampleImages()">
+                🔄 Load New Images
+            </button>
+        </div>
+    </div>
+
+    <!-- Results Panel -->
+    <div class="results-panel" id="results-panel">
+        <!-- Image Comparison -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon green">🎯</div>
+                <div>
+                    <div class="card-title">Attack Results</div>
+                    <div class="card-subtitle">Original vs Adversarial comparison</div>
+                </div>
+            </div>
+
+            <div class="image-comparison">
+                <div class="comparison-item">
+                    <div class="img-container" id="orig-image">
+                        <div class="empty-state" style="padding:1rem;">
+                            <div class="empty-icon" style="font-size:2rem;">🖼</div>
+                            <p style="font-size:0.75rem;">Select an image</p>
+                        </div>
+                    </div>
+                    <div class="img-label">Original</div>
+                    <div class="img-sublabel" id="orig-label">—</div>
+                </div>
+                <div class="comparison-item">
+                    <div class="img-container" id="adv-image">
+                        <div class="empty-state" style="padding:1rem;">
+                            <div class="empty-icon" style="font-size:2rem;">🎯</div>
+                            <p style="font-size:0.75rem;">Run an attack</p>
+                        </div>
+                    </div>
+                    <div class="img-label">Adversarial</div>
+                    <div class="img-sublabel" id="adv-label">—</div>
+                </div>
+                <div class="comparison-item">
+                    <div class="img-container" id="pert-image">
+                        <div class="empty-state" style="padding:1rem;">
+                            <div class="empty-icon" style="font-size:2rem;">🔍</div>
+                            <p style="font-size:0.75rem;">Perturbation</p>
+                        </div>
+                    </div>
+                    <div class="img-label">Perturbation (×5)</div>
+                    <div class="img-sublabel">Amplified for visibility</div>
+                </div>
+            </div>
+
+            <!-- Metrics -->
+            <div class="metrics-row" id="attack-metrics"></div>
+        </div>
+
+        <!-- Confidence Bars -->
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon blue">📊</div>
+                    <div>
+                        <div class="card-title">Original Predictions</div>
+                        <div class="card-subtitle">Model confidence on clean input</div>
+                    </div>
+                </div>
+                <div class="confidence-bars">
+                    {% for i in range(10) %}
+                    <div class="confidence-bar">
+                        <span class="bar-label">{{ i }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill blue" id="orig-bar-{{ i }}" style="width: 0%"></div>
+                        </div>
+                        <span class="bar-value" id="orig-val-{{ i }}"></span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon pink">📊</div>
+                    <div>
+                        <div class="card-title">Adversarial Predictions</div>
+                        <div class="card-subtitle">Model confidence after attack</div>
+                    </div>
+                </div>
+                <div class="confidence-bars">
+                    {% for i in range(10) %}
+                    <div class="confidence-bar">
+                        <span class="bar-label">{{ i }}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill purple" id="adv-bar-{{ i }}" style="width: 0%"></div>
+                        </div>
+                        <span class="bar-value" id="adv-val-{{ i }}"></span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Defense Results -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon amber">🛡</div>
+                <div>
+                    <div class="card-title">Defense Effectiveness</div>
+                    <div class="card-subtitle">How each defense handles this adversarial example</div>
+                </div>
+            </div>
+            <div class="defense-grid" id="defense-results">
+                <div class="empty-state" style="grid-column: 1/-1;">
+                    <p style="font-size: 0.85rem; color: var(--text-tertiary);">
+                        Run an attack to see how each defense responds
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="height: 4rem;"></div>
+{% endblock %}
