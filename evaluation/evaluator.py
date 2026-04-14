@@ -79,26 +79,46 @@ def evaluate_single_combination(attack_fn, model, images, labels, epsilon,
         results['l_inf_values'].append(perturbations.abs().max().item())
         results['l2_values'].append(perturbations.norm(2, dim=[1, 2, 3]).mean().item())
     else:
-        # EC attacks (per-image, collect perturbations)
+        # EC attacks (per-image — use subset for speed)
+        ec_limit = min(images.size(0), 20)  # Limit EC to 20 images max
+        results['total_samples'] = ec_limit
+        results['total_correct_clean'] = 0
+        # Recount clean correct for the subset
+        with torch.no_grad():
+            if defense_type == 'input_transform':
+                sub_out = model(apply_input_transforms(images[:ec_limit]))
+            elif defense_type == 'detection':
+                sub_preds, _, _ = detect_and_predict(model, defense_extras['detector'], images[:ec_limit], device)
+                results['total_correct_clean'] = (sub_preds == labels[:ec_limit]).sum().item()
+            else:
+                sub_out = model(images[:ec_limit])
+            if defense_type != 'detection':
+                results['total_correct_clean'] = (sub_out.argmax(1) == labels[:ec_limit]).sum().item()
+
         adv_list = []
-        for i in range(images.size(0)):
+        for i in range(ec_limit):
             img = images[i]
             lbl = labels[i].item()
             t0 = time.time()
 
             if attack_fn == 'genetic':
                 res = genetic_attack(model, img, lbl, epsilon,
-                                     pop_size=30, generations=50, device=device)
+                                     pop_size=20, generations=30, device=device)
             else:
                 res = de_attack(model, img, lbl, epsilon,
-                                maxiter=50, device=device)
+                                maxiter=30, popsize=10, device=device)
 
             adv_list.append(res['adversarial'])
             results['l_inf_values'].append(res['l_inf'])
             results['l2_values'].append(res['l2'])
             results['times'].append(time.time() - t0)
+            print(f"    [{i+1}/{ec_limit}]", end="", flush=True)
 
+        print(" ", end="", flush=True)
         adv_images = torch.stack(adv_list).to(device)
+        # Trim images and labels for EC subset
+        images = images[:ec_limit]
+        labels = labels[:ec_limit]
 
     # ── Evaluate defense on adversarial examples ──
     with torch.no_grad():

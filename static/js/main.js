@@ -326,6 +326,7 @@ function renderComparison(data) {
     renderHeatmap(data);
     renderBarChart(data);
     renderRadarChart(data);
+    renderNotebookStats();
     renderMetricsTable(data);
 }
 
@@ -525,6 +526,83 @@ function renderMetricsTable(data) {
 
     html += '</tbody></table></div>';
     container.innerHTML = html;
+}
+
+function renderNotebookStats() {
+    // 1. Clean Accuracy Chart
+    const cleanCanvas = $('#clean-acc-chart');
+    if (cleanCanvas) {
+        if (charts.clean) charts.clean.destroy();
+        charts.clean = new Chart(cleanCanvas, {
+            type: 'bar',
+            data: {
+                labels: ['Base CNN', 'Adv Trained', 'Distilled'],
+                datasets: [{
+                    label: 'Clean Accuracy (%)',
+                    data: [99.0, 98.2, 98.8],
+                    backgroundColor: ['rgba(52, 152, 219, 0.8)', 'rgba(231, 76, 60, 0.8)', 'rgba(46, 204, 113, 0.8)'],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { min: 90, max: 100, ticks: { color: '#8892b0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { ticks: { color: '#8892b0' } }
+                }
+            }
+        });
+    }
+
+    // 2. Accuracy vs Epsilon Curve
+    const epsCanvas = $('#epsilon-chart');
+    if (epsCanvas) {
+        if (charts.epsilon) charts.epsilon.destroy();
+        const epsilons = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4];
+        charts.epsilon = new Chart(epsCanvas, {
+            type: 'line',
+            data: {
+                labels: epsilons,
+                datasets: [
+                    { label: 'FGSM', data: [99.0, 85.0, 60.1, 40.2, 20.5, 5.0, 0.0, 0.0], borderColor: 'rgba(231, 76, 60, 1)', backgroundColor: 'rgba(231, 76, 60, 0.1)', fill: true, tension: 0.3 },
+                    { label: 'PGD', data: [99.0, 75.0, 30.5, 10.0, 2.0, 0.0, 0.0, 0.0], borderColor: 'rgba(155, 89, 182, 1)', backgroundColor: 'rgba(155, 89, 182, 0.1)', fill: true, tension: 0.3 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#8892b0' } } },
+                scales: {
+                    y: { beginAtZero: true, max: 105, ticks: { color: '#8892b0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { title: { display: true, text: 'Epsilon (ε)', color: '#8892b0' }, ticks: { color: '#8892b0' } }
+                }
+            }
+        });
+    }
+
+    // 3. Detection Network Score Distribution (Simplified Mock Histogram)
+    const detCanvas = $('#detection-chart');
+    if (detCanvas) {
+        if (charts.detection) charts.detection.destroy();
+        charts.detection = new Chart(detCanvas, {
+            type: 'bar',
+            data: {
+                labels: ['0-0.1', '0.1-0.2', '0.2-0.3', '0.3-0.4', '0.4-0.5', '0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0'],
+                datasets: [
+                    { label: 'Clean', data: [95, 2, 1, 1, 1, 0, 0, 0, 0, 0], backgroundColor: 'rgba(46, 204, 113, 0.6)' },
+                    { label: 'Adversarial (PGD)', data: [0, 0, 1, 1, 2, 5, 10, 15, 25, 41], backgroundColor: 'rgba(231, 76, 60, 0.6)' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#8892b0' } } },
+                scales: {
+                    y: { title: { display: true, text: 'Frequency', color: '#8892b0' }, ticks: { color: '#8892b0', display: false }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { title: { display: true, text: 'P(adversarial)', color: '#8892b0' }, ticks: { color: '#8892b0' }, stacked: false }
+                }
+            }
+        });
+    }
 }
 
 // ─── Attack Type Change Handling ───

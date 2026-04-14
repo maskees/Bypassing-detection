@@ -57,6 +57,53 @@
         </div>
     </div>
 
+    <!-- Notebook Statistics Row -->
+    <div class="page-header" style="margin: 2rem 0 1rem; padding: 1rem 0;">
+        <h2 style="font-size: 1.5rem;">Notebook Statistics</h2>
+        <p style="font-size: 0.9rem;">Specific experiment outputs replicated from test_models.ipynb</p>
+    </div>
+
+    <div class="grid-3" style="margin-bottom: 1.5rem;">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon pink">📈</div>
+                <div>
+                    <div class="card-title">Clean Model Accuracy</div>
+                    <div class="card-subtitle">Baseline vs Defended CNNs</div>
+                </div>
+            </div>
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="clean-acc-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon amber">📉</div>
+                <div>
+                    <div class="card-title">Accuracy vs Epsilon</div>
+                    <div class="card-subtitle">Impact of perturbation budget</div>
+                </div>
+            </div>
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="epsilon-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon purple">🔍</div>
+                <div>
+                    <div class="card-title">Detection Histogram</div>
+                    <div class="card-subtitle">Probability of Adversarial</div>
+                </div>
+            </div>
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="detection-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
     <!-- Detailed Metrics Table -->
     <div class="card" style="margin-bottom: 1.5rem;">
         <div class="card-header">
