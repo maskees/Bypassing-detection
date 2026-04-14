@@ -45,18 +45,18 @@ def get_data_loaders(batch_size=128):
         transforms.ToTensor(),
     ])
 
-    train_dataset = datasets.MNIST(
-        root='./data', train=True, download=True, transform=transform
+    train_dataset = datasets.ImageFolder(
+        root='./data/RoadSigns/train', transform=transform
     )
-    test_dataset = datasets.MNIST(
-        root='./data', train=False, download=True, transform=transform
+    test_dataset = datasets.ImageFolder(
+        root='./data/RoadSigns/test', transform=transform
     )
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
     )
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, num_workers=2
+        test_dataset, batch_size=batch_size, shuffle=False, num_workers=0
     )
 
     print(f"MNIST loaded: {len(train_dataset)} train, {len(test_dataset)} test")
@@ -69,7 +69,7 @@ def train_base_model(train_loader, test_loader, epochs=5, lr=0.001, device='cuda
     print("STEP 1: Training Base Model")
     print("=" * 50)
 
-    model = MNISTNet().to(device)
+    model = MNISTNet(in_channels=3, num_classes=4).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 
@@ -215,7 +215,7 @@ def main():
         models_dict=models_dict,
         test_loader=test_loader,
         epsilon=0.3,
-        num_samples=50,
+        num_samples=5,
         device=device,
         save_path='results/evaluation_results.json'
     )

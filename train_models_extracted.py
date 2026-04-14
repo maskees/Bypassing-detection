@@ -47,11 +47,11 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-train_dataset = datasets.MNIST(
-    root='./data', train=True, download=True, transform=transform
+train_dataset = datasets.ImageFolder(
+    root='./data/RoadSigns/train', transform=transform
 )
-test_dataset = datasets.MNIST(
-    root='./data', train=False, download=True, transform=transform
+test_dataset = datasets.ImageFolder(
+    root='./data/RoadSigns/test', transform=transform
 )
 
 train_loader = torch.utils.data.DataLoader(
@@ -104,7 +104,7 @@ print("=" * 55)
 print(f"  Epochs: {BASE_EPOCHS}  |  LR: {BASE_LR}  |  Device: {DEVICE}")
 print()
 
-base_model = MNISTNet().to(DEVICE)
+base_model = MNISTNet(in_channels=3, num_classes=4).to(DEVICE)
 optimizer = optim.Adam(base_model.parameters(), lr=BASE_LR)
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 

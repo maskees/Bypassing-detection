@@ -45,7 +45,7 @@ def test_model_loading(device):
             continue
 
         try:
-            model = cls().to(device)
+            model = cls(in_channels=3, num_classes=4).to(device)
             state_dict = torch.load(path, map_location=device, weights_only=True)
             model.load_state_dict(state_dict)
             model.eval()
@@ -182,7 +182,7 @@ def main():
     # Download MNIST data
     print("\nDownloading MNIST dataset...")
     transform = transforms.Compose([transforms.ToTensor()])
-    test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+    test_dataset = datasets.ImageFolder(root='./data/RoadSigns/test', transform=transform)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=128, shuffle=False, num_workers=0)
     print(f"✓ MNIST test set: {len(test_dataset)} images")
 

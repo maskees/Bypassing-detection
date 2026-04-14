@@ -14,10 +14,10 @@ class MNISTNet(nn.Module):
     Achieves ~99% accuracy on clean MNIST test set.
     """
 
-    def __init__(self, num_classes=10):
+    def __init__(self, in_channels=3, num_classes=4):
         super(MNISTNet, self).__init__()
-        # Block 1: 1 -> 32 channels
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
+        # Block 1: in_channels -> 32 channels
+        self.conv1 = nn.Conv2d(in_channels, 32, 3, padding=1)
         self.bn1 = nn.BatchNorm2d(32)
         self.conv2 = nn.Conv2d(32, 32, 3, padding=1)
         self.bn2 = nn.BatchNorm2d(32)

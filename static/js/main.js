@@ -5,6 +5,7 @@
  */
 
 // ─── State ───
+const CLASS_NAMES = ['crosswalk', 'speedlimit', 'stop', 'trafficlight'];
 const state = {
     selectedImage: null,
     selectedImageIndex: 0,
@@ -47,8 +48,8 @@ async function loadSampleImages() {
             thumb.className = `image-thumb ${i === 0 ? 'selected' : ''}`;
             thumb.onclick = () => selectImage(i);
             thumb.innerHTML = `
-                <img src="data:image/png;base64,${sample.image}" alt="Digit ${sample.label}">
-                <span class="thumb-label">${sample.label}</span>
+                <img src="data:image/png;base64,${sample.image}" alt="Sign ${sample.label}">
+                <span class="thumb-label">${CLASS_NAMES[sample.label]}</span>
             `;
             gallery.appendChild(thumb);
         });
@@ -78,7 +79,7 @@ function selectImage(index) {
 
     const origLabel = $('#orig-label');
     if (origLabel) {
-        origLabel.textContent = `True Label: ${state.selectedImage.label}`;
+        origLabel.textContent = `True Label: ${CLASS_NAMES[state.selectedImage.label]}`;
     }
 
     // Clear previous results
@@ -99,7 +100,7 @@ function clearResults() {
 
     // Clear confidence bars
     ['orig', 'adv'].forEach(prefix => {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 4; i++) {
             const fill = $(`#${prefix}-bar-${i}`);
             const val = $(`#${prefix}-val-${i}`);
             if (fill) fill.style.width = '0%';
@@ -193,7 +194,7 @@ function displayAttackResults(data) {
     if (advLabel) {
         const statusClass = data.attack_success ? 'danger' : 'success';
         const statusText = data.attack_success ? '✗ Misclassified' : '✓ Still Correct';
-        advLabel.innerHTML = `Prediction: ${data.adv_pred} <span class="badge ${statusClass}">${statusText}</span>`;
+        advLabel.innerHTML = `Prediction: ${CLASS_NAMES[data.adv_pred]} <span class="badge ${statusClass}">${statusText}</span>`;
     }
 
     // ── Confidence Bars ──
@@ -226,7 +227,7 @@ function displayAttackResults(data) {
 }
 
 function updateConfidenceBars(prefix, probs, trueLabel, predLabel) {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 4; i++) {
         const fill = $(`#${prefix}-bar-${i}`);
         const val = $(`#${prefix}-val-${i}`);
         if (!fill || !val) continue;
@@ -271,8 +272,8 @@ function displayDefenseResults(defenseResults, trueLabel) {
         } else {
             blocked = res.correct;
             resultText = res.correct
-                ? `Correct → ${res.prediction}`
-                : `Fooled → ${res.prediction}`;
+                ? `Correct → ${CLASS_NAMES[res.prediction]}`
+                : `Fooled → ${CLASS_NAMES[res.prediction]}`;
         }
 
         return `

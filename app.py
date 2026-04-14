@@ -45,19 +45,19 @@ def load_models():
     print(f"Loading models on {device}...")
 
     # Base model
-    base = MNISTNet().to(device)
+    base = MNISTNet(in_channels=3, num_classes=4).to(device)
     base.load_state_dict(torch.load('saved_models/base_model.pth', map_location=device, weights_only=True))
     base.eval()
     models['base'] = base
 
     # Adversarially trained model
-    adv = MNISTNet().to(device)
+    adv = MNISTNet(in_channels=3, num_classes=4).to(device)
     adv.load_state_dict(torch.load('saved_models/adv_trained_model.pth', map_location=device, weights_only=True))
     adv.eval()
     models['adv_trained'] = adv
 
     # Distilled model
-    distilled = MNISTNet().to(device)
+    distilled = MNISTNet(in_channels=3, num_classes=4).to(device)
     distilled.load_state_dict(torch.load('saved_models/distilled_model.pth', map_location=device, weights_only=True))
     distilled.eval()
     models['distilled'] = distilled
@@ -72,8 +72,7 @@ def load_models():
 
     # Load test dataset
     transform = transforms.Compose([transforms.ToTensor()])
-    test_dataset = datasets.MNIST(root='./data', train=False,
-                                  download=True, transform=transform)
+    test_dataset = datasets.ImageFolder(root='./data/RoadSigns/test', transform=transform)
     print(f"✓ Test dataset: {len(test_dataset)} images")
 
     # Load evaluation results
@@ -89,12 +88,16 @@ def load_models():
 
 def tensor_to_base64(tensor, amplify=1.0):
     """Convert a tensor image to base64-encoded PNG."""
-    if tensor.dim() == 3:
+    if tensor.dim() == 3 and tensor.shape[0] == 1:
         tensor = tensor.squeeze(0)   # Remove channel dim for grayscale
+        mode = 'L'
+    else:
+        tensor = tensor.permute(1, 2, 0)
+        mode = 'RGB'
 
     img_np = (tensor.detach().cpu().numpy() * amplify).clip(0, 1)
     img_np = (img_np * 255).astype(np.uint8)
-    pil_img = Image.fromarray(img_np, mode='L')
+    pil_img = Image.fromarray(img_np, mode=mode)
     pil_img = pil_img.resize((140, 140), Image.NEAREST)
 
     buffer = io.BytesIO()
@@ -104,15 +107,19 @@ def tensor_to_base64(tensor, amplify=1.0):
 
 def perturbation_to_base64(tensor):
     """Convert perturbation tensor to visible base64 image (amplified + colorized)."""
-    if tensor.dim() == 3:
+    if tensor.dim() == 3 and tensor.shape[0] == 1:
         tensor = tensor.squeeze(0)
+        mode = 'L'
+    else:
+        tensor = tensor.permute(1, 2, 0)
+        mode = 'RGB'
 
     pert_np = tensor.detach().cpu().numpy()
     # Normalize to [0, 1] for visualization
     abs_max = max(abs(pert_np.min()), abs(pert_np.max()), 1e-8)
     normalized = (pert_np / abs_max + 1) / 2  # Map [-1,1] to [0,1]
     img_np = (normalized * 255).astype(np.uint8)
-    pil_img = Image.fromarray(img_np, mode='L')
+    pil_img = Image.fromarray(img_np, mode=mode)
     pil_img = pil_img.resize((140, 140), Image.NEAREST)
 
     buffer = io.BytesIO()

@@ -151,9 +151,9 @@
                     </div>
                 </div>
                 <div class="confidence-bars">
-                    {% for i in range(10) %}
+                    {% for i, label in [(0, 'crosswalk'), (1, 'speedlimit'), (2, 'stop'), (3, 'trafficlight')] %}
                     <div class="confidence-bar">
-                        <span class="bar-label">{{ i }}</span>
+                        <span class="bar-label">{{ label }}</span>
                         <div class="bar-track">
                             <div class="bar-fill blue" id="orig-bar-{{ i }}" style="width: 0%"></div>
                         </div>
@@ -172,9 +172,9 @@
                     </div>
                 </div>
                 <div class="confidence-bars">
-                    {% for i in range(10) %}
+                    {% for i, label in [(0, 'crosswalk'), (1, 'speedlimit'), (2, 'stop'), (3, 'trafficlight')] %}
                     <div class="confidence-bar">
-                        <span class="bar-label">{{ i }}</span>
+                        <span class="bar-label">{{ label }}</span>
                         <div class="bar-track">
                             <div class="bar-fill purple" id="adv-bar-{{ i }}" style="width: 0%"></div>
                         </div>
