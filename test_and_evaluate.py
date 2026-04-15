@@ -30,7 +30,6 @@ def test_model_loading(device):
     print("\n" + "=" * 50)
     print("STEP 1: Testing Model Loading")
     print("=" * 50)
-
     models = {}
     model_files = {
         'base': ('saved_models/base_model.pth', MNISTNet),
