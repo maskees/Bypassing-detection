@@ -5,6 +5,11 @@ Dataset structure:
   data/traffic_Data/DATA/{class_id}/  -- training images (ImageFolder)
   data/traffic_Data/TEST/             -- test images (flat, filenames encode class)
   data/labels.csv                     -- class ID to name mapping
+
+CRITICAL: ImageFolder sorts folder names alphabetically by default, which maps
+'10' -> idx 2, '2' -> idx 12, etc. This breaks alignment with TrafficTestDataset
+which parses literal integer class IDs from filenames. NumericImageFolder fixes
+this by sorting numerically so folder '0' -> idx 0, '1' -> idx 1 ... '57' -> idx 57.
 """
 
 import os
@@ -14,6 +19,22 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import datasets, transforms
 from PIL import Image
+
+
+class NumericImageFolder(datasets.ImageFolder):
+    """
+    ImageFolder that sorts class folders numerically, not alphabetically.
+    Ensures class index 0 = folder '0', index 10 = folder '10' etc,
+    matching the literal class IDs in TrafficTestDataset filenames.
+    """
+    def find_classes(self, directory):
+        classes = sorted(
+            [d for d in os.listdir(directory)
+             if os.path.isdir(os.path.join(directory, d))],
+            key=lambda x: int(x)  # numeric sort
+        )
+        class_to_idx = {cls: int(cls) for cls in classes}  # folder name IS the class ID
+        return classes, class_to_idx
 
 IMG_SIZE = 32
 
@@ -80,8 +101,8 @@ def load_label_names(csv_path='data/labels.csv'):
 
 
 def get_train_loader(batch_size=64, num_workers=0):
-    """Get training data loader using ImageFolder on DATA/."""
-    train_dataset = datasets.ImageFolder(
+    """Get training data loader using NumericImageFolder on DATA/."""
+    train_dataset = NumericImageFolder(
         root='data/traffic_Data/DATA',
         transform=TRAIN_TRANSFORM,
     )

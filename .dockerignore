@@ -1,0 +1,27 @@
+# Git
+.git
+.gitignore
+
+# Python cache/artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Data and model artifacts (mounted from host at runtime)
+data/
+saved_models/
+results/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE
+.vscode/

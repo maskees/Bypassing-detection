@@ -103,5 +103,3 @@ class DetectorNet(nn.Module):
         return x
 
 
-# Backward-compatible alias
-MNISTNet = TrafficNet
