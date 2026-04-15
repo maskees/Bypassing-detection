@@ -1,2 +1,4 @@
 **/__pycache__
 .vscode
+saved_models/*.pth
+results/*.json

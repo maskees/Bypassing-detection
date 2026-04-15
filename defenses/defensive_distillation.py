@@ -51,21 +51,22 @@ def distillation_loss(student_logits, teacher_logits, labels,
     return total_loss
 
 
-def train_distilled_model(teacher_model, model_class, train_loader,
+def train_distilled_model(teacher_model, model_factory, train_loader,
                           temperature=20.0, alpha=0.7, epochs=10,
-                          lr=0.01, device='cuda'):
+                          lr=0.01, device='cuda', weight_decay=1e-4):
     """
     Train a student model using defensive distillation.
 
     Args:
         teacher_model: Pre-trained teacher model (frozen)
-        model_class: Model class for student (same architecture)
-        train_loader: Training data loader
+        model_factory: Callable that returns a fresh student model instance
+        train_loader: Training data loader yielding (images, labels) tuples
         temperature: Distillation temperature (higher = softer labels)
         alpha: Weight for distillation loss vs standard CE loss
         epochs: Training epochs
         lr: Learning rate
         device: Computation device
+        weight_decay: AdamW weight decay
 
     Returns:
         Trained distilled student model
@@ -73,12 +74,12 @@ def train_distilled_model(teacher_model, model_class, train_loader,
     teacher_model.eval()
     teacher_model = teacher_model.to(device)
 
-    student_model = model_class().to(device)
-    optimizer = optim.Adam(student_model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+    student_model = model_factory().to(device)
+    optimizer = optim.AdamW(student_model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     print(f"\n[Defense] Defensive Distillation")
-    print(f"  Temperature={temperature}, α={alpha}, epochs={epochs}")
+    print(f"  Temperature={temperature}, alpha={alpha}, epochs={epochs}")
 
     for epoch in range(epochs):
         student_model.train()

@@ -38,31 +38,34 @@ def pgd_for_training(model, images, labels, epsilon, alpha, steps):
     return adv
 
 
-def train_adversarial_model(model_class, train_loader, epsilon=0.3,
+def train_adversarial_model(model_factory, train_loader, epsilon=0.3,
                             alpha=0.01, pgd_steps=7, epochs=10,
-                            lr=0.01, device='cuda'):
+                            lr=0.01, device='cuda', weight_decay=1e-4,
+                            class_weights=None):
     """
     Train a model using adversarial training (Madry et al. approach).
 
     Args:
-        model_class: Model class to instantiate
-        train_loader: Training data loader
-        epsilon: Perturbation bound for PGD
+        model_factory: Callable that returns a fresh model instance
+        train_loader: Training data loader yielding (images, labels) tuples
+        epsilon: Perturbation bound for PGD (in input space)
         alpha: PGD step size
         pgd_steps: Number of PGD steps per training batch
         epochs: Training epochs
         lr: Learning rate
         device: Computation device
+        weight_decay: AdamW weight decay
+        class_weights: Optional class weights for cross-entropy loss
 
     Returns:
         Trained adversarially robust model
     """
-    model = model_class().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+    model = model_factory().to(device)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     print("\n[Defense] Adversarial Training")
-    print(f"  ε={epsilon}, α={alpha}, PGD steps={pgd_steps}, epochs={epochs}")
+    print(f"  eps={epsilon}, alpha={alpha}, PGD steps={pgd_steps}, epochs={epochs}")
 
     for epoch in range(epochs):
         model.train()
@@ -80,7 +83,7 @@ def train_adversarial_model(model_class, train_loader, epsilon=0.3,
             # Train on adversarial examples
             optimizer.zero_grad()
             outputs = model(adv_images)
-            loss = F.cross_entropy(outputs, labels)
+            loss = F.cross_entropy(outputs, labels, weight=class_weights)
             loss.backward()
             optimizer.step()
 

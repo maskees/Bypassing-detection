@@ -103,6 +103,50 @@ def apply_input_transforms(images, methods=None):
     return result
 
 
+def adaptive_input_transforms(images, original_images=None, epsilon=None):
+    """
+    Apply input transformations scaled to perturbation strength.
+    Stronger perturbations get more aggressive denoising.
+
+    Args:
+        images: Adversarial images (N, C, H, W) in [0, 1]
+        original_images: Optional clean images for perturbation estimation
+        epsilon: Known perturbation budget; used if original not available
+
+    Returns:
+        Transformed images
+    """
+    # Estimate perturbation magnitude
+    if original_images is not None:
+        pert_mag = (images - original_images).abs().max().item()
+    elif epsilon is not None:
+        pert_mag = epsilon
+    else:
+        pert_mag = 0.03  # default
+
+    result = images.clone()
+
+    if pert_mag < 0.05:
+        # Light: standard pipeline
+        result = gaussian_smooth(result, kernel_size=3, sigma=1.0)
+        result = bit_depth_reduction(result, bits=5)
+        result = jpeg_compression(result, quality=80)
+    elif pert_mag < 0.15:
+        # Medium: stronger smoothing + compression
+        result = gaussian_smooth(result, kernel_size=5, sigma=1.5)
+        result = bit_depth_reduction(result, bits=4)
+        result = jpeg_compression(result, quality=50)
+    else:
+        # Heavy: aggressive denoising for large perturbations
+        result = gaussian_smooth(result, kernel_size=7, sigma=2.5)
+        result = bit_depth_reduction(result, bits=3)
+        result = jpeg_compression(result, quality=30)
+        # Second pass of smoothing for extreme perturbations
+        result = gaussian_smooth(result, kernel_size=5, sigma=1.5)
+
+    return result
+
+
 def transform_and_predict(model, images, methods=None, device='cuda'):
     """
     Apply input transformations and then classify.

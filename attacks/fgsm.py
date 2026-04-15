@@ -14,6 +14,7 @@ import torch.nn.functional as F
 def fgsm_attack(model, images, labels, epsilon, device='cuda'):
     """
     Generate adversarial examples using FGSM.
+    Uses targeted mode at higher epsilon for diverse misclassification.
 
     Args:
         model: Target classifier (nn.Module)
@@ -30,25 +31,36 @@ def fgsm_attack(model, images, labels, epsilon, device='cuda'):
     model.eval()
     images = images.clone().detach().to(device)
     labels = labels.clone().detach().to(device)
+
+    # At higher epsilon, use targeted attack toward a random wrong class
+    # to get diverse misclassification instead of collapsing to one class
+    use_targeted = epsilon > 0.05
+    if use_targeted:
+        num_classes = model(images[:1]).shape[1]
+        # Pick a random class that is NOT the true label
+        target_labels = torch.zeros_like(labels)
+        for i in range(labels.size(0)):
+            choices = [c for c in range(num_classes) if c != labels[i].item()]
+            target_labels[i] = choices[torch.randint(len(choices), (1,)).item()]
+
     images.requires_grad_(True)
 
-    # Forward pass
     outputs = model(images)
-    loss = F.cross_entropy(outputs, labels)
+    if use_targeted:
+        # Minimize loss toward target (negative CE)
+        loss = -F.cross_entropy(outputs, target_labels)
+    else:
+        loss = F.cross_entropy(outputs, labels)
 
-    # Compute gradients
     model.zero_grad()
     loss.backward()
 
-    # Generate perturbation
     grad_sign = images.grad.data.sign()
     perturbations = epsilon * grad_sign
 
-    # Create adversarial images
     adv_images = torch.clamp(images.data + perturbations, 0.0, 1.0)
     perturbations = adv_images - images.data
 
-    # Check attack success
     with torch.no_grad():
         adv_outputs = model(adv_images)
         adv_preds = adv_outputs.argmax(dim=1)

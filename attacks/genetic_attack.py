@@ -23,7 +23,7 @@ import time
 
 def genetic_attack(model, image, label, epsilon, pop_size=50, generations=100,
                    crossover_rate=0.7, mutation_rate=0.3, tournament_size=3,
-                   device='cuda'):
+                   reduce_size=14, device='cuda'):
     """
     Generate an adversarial example using a Genetic Algorithm.
 
@@ -46,8 +46,8 @@ def genetic_attack(model, image, label, epsilon, pop_size=50, generations=100,
     start_time = time.time()
 
     image = image.to(device)
-    flat_size = image.numel()  # 1*28*28 = 784 for MNIST
-    img_shape = image.shape
+    channels, height, width = image.shape
+    flat_size = channels * reduce_size * reduce_size
 
     # ── Initialize population: random perturbations in [-ε, ε] ──
     population = np.random.uniform(-epsilon, epsilon,
@@ -60,7 +60,15 @@ def genetic_attack(model, image, label, epsilon, pop_size=50, generations=100,
     def evaluate_fitness(pop_array):
         """Evaluate fitness for entire population (batched for GPU speed)."""
         nonlocal queries
-        pert_tensor = torch.tensor(pop_array, device=device).view(-1, *img_shape)
+        pert_tensor = torch.tensor(pop_array, device=device).view(
+            -1, channels, reduce_size, reduce_size
+        )
+        pert_tensor = F.interpolate(
+            pert_tensor,
+            size=(height, width),
+            mode='bilinear',
+            align_corners=False,
+        )
         adv_batch = torch.clamp(image.unsqueeze(0) + pert_tensor, 0.0, 1.0)
 
         with torch.no_grad():
@@ -73,6 +81,17 @@ def genetic_attack(model, image, label, epsilon, pop_size=50, generations=100,
 
         queries += len(pop_array)
         return fitness, preds
+
+    def expand_perturbation(pert):
+        pert_tensor = torch.tensor(pert, device=device).view(
+            1, channels, reduce_size, reduce_size
+        )
+        return F.interpolate(
+            pert_tensor,
+            size=(height, width),
+            mode='bilinear',
+            align_corners=False,
+        ).squeeze(0)
 
     for gen in range(generations):
         fitness, preds = evaluate_fitness(population)
@@ -91,7 +110,7 @@ def genetic_attack(model, image, label, epsilon, pop_size=50, generations=100,
             best_pert = population[best_success]
             elapsed = time.time() - start_time
             adv_tensor = torch.clamp(
-                image + torch.tensor(best_pert, device=device).view(img_shape),
+                image + expand_perturbation(best_pert),
                 0.0, 1.0
             )
             return _build_result(model, image, adv_tensor, label, True,
@@ -132,7 +151,7 @@ def genetic_attack(model, image, label, epsilon, pop_size=50, generations=100,
     # ── Return best result after all generations ──
     elapsed = time.time() - start_time
     adv_tensor = torch.clamp(
-        image + torch.tensor(best_pert, device=device).view(img_shape),
+        image + expand_perturbation(best_pert),
         0.0, 1.0
     )
     with torch.no_grad():

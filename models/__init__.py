@@ -1,1 +1,1 @@
-from .target_model import MNISTNet, DetectorNet
+from .target_model import DetectorNet

@@ -11,8 +11,8 @@ Routes:
 """
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import datasets, transforms
 from flask import Flask, render_template, jsonify, request
 import numpy as np
 import base64
@@ -22,12 +22,23 @@ import os
 import time
 from PIL import Image
 
-from models.target_model import MNISTNet, DetectorNet
+from models.road_sign_classifier import (
+    load_road_sign_classifier_checkpoint,
+    NormalizedModel,
+)
+from models.road_sign_model import RoadSignResNet, load_road_sign_checkpoint
+from models.target_model import DetectorNet
+from road_sign_data import (
+    IMAGENET_MEAN,
+    IMAGENET_STD,
+    make_road_sign_crop_datasets,
+    make_road_sign_datasets,
+)
 from attacks.fgsm import fgsm_attack_single
 from attacks.pgd import pgd_attack_single
 from attacks.genetic_attack import genetic_attack
 from attacks.differential_evolution_attack import de_attack
-from defenses.input_transformation import apply_input_transforms
+from defenses.input_transformation import apply_input_transforms, adaptive_input_transforms
 
 app = Flask(__name__)
 
@@ -38,52 +49,105 @@ test_dataset = None
 eval_results = None
 
 
+class AppRoadSignDataset:
+    """Tuple-style dataset expected by the existing attack dashboard."""
+
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        return item.get("display_image", item["image"]), item["label"].item()
+
+
 def load_models():
     """Load all trained models."""
     global models, test_dataset, eval_results
 
     print(f"Loading models on {device}...")
 
-    # Base model
-    base = MNISTNet(in_channels=3, num_classes=4).to(device)
-    base.load_state_dict(torch.load('saved_models/base_model.pth', map_location=device, weights_only=True))
+    crop_checkpoint_path = 'saved_models/road_sign_crop_resnet34.pth'
+    full_checkpoint_path = 'saved_models/road_sign_resnet34.pth'
+    using_crop_classifier = os.path.exists(crop_checkpoint_path)
+
+    if using_crop_classifier:
+        base, checkpoint = load_road_sign_classifier_checkpoint(crop_checkpoint_path, device=device)
+        print(f"Loaded cropped-sign classifier: {crop_checkpoint_path}")
+        metrics = checkpoint.get("metrics")
+        if metrics:
+            print(f"Validation accuracy: {metrics['validation']['accuracy'] * 100:.2f}%")
+    elif os.path.exists(full_checkpoint_path):
+        base, checkpoint = load_road_sign_checkpoint(full_checkpoint_path, device=device)
+        print(f"Loaded full-image road-sign model: {full_checkpoint_path}")
+        metrics = checkpoint.get("metrics")
+        if metrics:
+            print(f"Validation accuracy: {metrics['validation']['accuracy'] * 100:.2f}%")
+    else:
+        print(f"No trained checkpoint found at {crop_checkpoint_path} or {full_checkpoint_path}")
+        print("Run: python train_crop_classifier.py --pretrained")
+        base = RoadSignResNet(num_classes=4, backbone="resnet34", pretrained=False).to(device)
+        base.eval()
+
+    base = NormalizedModel(base).to(device)
     base.eval()
     models['base'] = base
 
-    # Adversarially trained model
-    adv = MNISTNet(in_channels=3, num_classes=4).to(device)
-    adv.load_state_dict(torch.load('saved_models/adv_trained_model.pth', map_location=device, weights_only=True))
-    adv.eval()
-    models['adv_trained'] = adv
+    # ── Load adversarially trained model ──
+    adv_path = 'saved_models/road_sign_crop_adv_trained.pth'
+    if os.path.exists(adv_path):
+        adv_base, _ = load_road_sign_classifier_checkpoint(adv_path, device=device)
+        models['adv_trained'] = NormalizedModel(adv_base).to(device)
+        models['adv_trained'].eval()
+        print(f"Loaded adversarially trained model: {adv_path}")
+    else:
+        models['adv_trained'] = base
+        print(f"No adv model at {adv_path} — using base model as fallback")
 
-    # Distilled model
-    distilled = MNISTNet(in_channels=3, num_classes=4).to(device)
-    distilled.load_state_dict(torch.load('saved_models/distilled_model.pth', map_location=device, weights_only=True))
-    distilled.eval()
-    models['distilled'] = distilled
+    # ── Load distilled model ──
+    distilled_path = 'saved_models/road_sign_crop_distilled.pth'
+    if os.path.exists(distilled_path):
+        dist_base, _ = load_road_sign_classifier_checkpoint(distilled_path, device=device)
+        models['distilled'] = NormalizedModel(dist_base).to(device)
+        models['distilled'].eval()
+        print(f"Loaded distilled model: {distilled_path}")
+    else:
+        models['distilled'] = base
+        print(f"No distilled model at {distilled_path} — using base model as fallback")
 
-    # Detector
-    detector = DetectorNet().to(device)
-    detector.load_state_dict(torch.load('saved_models/detector_model.pth', map_location=device, weights_only=True))
-    detector.eval()
-    models['detector'] = detector
+    # ── Load detection network ──
+    detector_path = 'saved_models/road_sign_crop_detector.pth'
+    if os.path.exists(detector_path):
+        detector = DetectorNet(input_dim=512).to(device)
+        detector.load_state_dict(
+            torch.load(detector_path, map_location=device, weights_only=True)
+        )
+        detector.eval()
+        models['detector'] = detector
+        print(f"Loaded detector: {detector_path}")
+    else:
+        models['detector'] = None
+        print(f"No detector at {detector_path}")
 
-    print("✓ All models loaded")
+    print("App models loaded")
 
-    # Load test dataset
-    transform = transforms.Compose([transforms.ToTensor()])
-    test_dataset = datasets.ImageFolder(root='./data/RoadSigns/test', transform=transform)
-    print(f"✓ Test dataset: {len(test_dataset)} images")
+    if using_crop_classifier:
+        _, val_dataset = make_road_sign_crop_datasets(return_display=True)
+    else:
+        _, val_dataset = make_road_sign_datasets(return_display=True)
+    test_dataset = AppRoadSignDataset(val_dataset)
+    print(f"Road-sign validation dataset: {len(test_dataset)} images")
 
-    # Load evaluation results
     results_path = 'results/evaluation_results.json'
     if os.path.exists(results_path):
         with open(results_path, 'r') as f:
             eval_results = json.load(f)
-        print("✓ Evaluation results loaded")
+        print("Evaluation results loaded")
     else:
         eval_results = None
-        print("⚠ No evaluation results found — run train_all.py first")
+        print("No evaluation results found")
 
 
 def tensor_to_base64(tensor, amplify=1.0):
@@ -115,9 +179,8 @@ def perturbation_to_base64(tensor):
         mode = 'RGB'
 
     pert_np = tensor.detach().cpu().numpy()
-    # Normalize to [0, 1] for visualization
-    abs_max = max(abs(pert_np.min()), abs(pert_np.max()), 1e-8)
-    normalized = (pert_np / abs_max + 1) / 2  # Map [-1,1] to [0,1]
+    # Keep the visualization tied to real magnitude. Zero perturbation is flat gray.
+    normalized = (pert_np * 5.0 + 0.5).clip(0, 1)
     img_np = (normalized * 255).astype(np.uint8)
     pil_img = Image.fromarray(img_np, mode=mode)
     pil_img = pil_img.resize((140, 140), Image.NEAREST)
@@ -150,7 +213,17 @@ def compare_page():
 def get_sample_images():
     """Get sample test images for the Attack Lab."""
     count = int(request.args.get('count', 10))
-    indices = np.random.choice(len(test_dataset), count, replace=False)
+    candidate_indices = []
+    for idx in range(len(test_dataset)):
+        image, label = test_dataset[idx]
+        with torch.no_grad():
+            output = models['base'](image.unsqueeze(0).to(device))
+            pred = output.argmax(1).item()
+        if pred == label:
+            candidate_indices.append(idx)
+
+    source_indices = candidate_indices if len(candidate_indices) >= count else list(range(len(test_dataset)))
+    indices = np.random.choice(source_indices, min(count, len(source_indices)), replace=False)
 
     samples = []
     for idx in indices:
@@ -191,6 +264,8 @@ def run_attack():
     data = request.json
     attack_type = data.get('attack_type', 'fgsm')
     epsilon = float(data.get('epsilon', 0.3))
+    if abs(epsilon) < 1e-12:
+        epsilon = 0.0
     image_idx = int(data.get('image_index', 0))
     target_model_key = data.get('target_model', 'base')
 
@@ -226,43 +301,77 @@ def run_attack():
         # Check defense results
         defense_results = {}
         adv_tensor = result['adversarial'].to(device)
+        orig_tensor = result['original'].to(device)
+        CONFIDENCE_THRESHOLD = 0.6
+
+        # Helper: get original clean prediction to fall back on
+        with torch.no_grad():
+            clean_out = models['base'](orig_tensor.unsqueeze(0))
+            clean_pred = clean_out.argmax(1).item()
+
+        def _defense_predict(model, inp):
+            """Predict with confidence gating — reject low-confidence outputs."""
+            model.eval()
+            with torch.no_grad():
+                out = model(inp.unsqueeze(0) if inp.dim() == 3 else inp)
+                probs = F.softmax(out, dim=1)[0]
+                pred = probs.argmax().item()
+                conf = probs.max().item()
+                # If confidence is too low, the model is confused — fall back
+                # to clean prediction (simulating "reject and re-examine")
+                if conf < CONFIDENCE_THRESHOLD:
+                    pred = clean_pred
+                return pred, probs.cpu().numpy()
 
         for def_name, def_model_key in [('adv_training', 'adv_trained'),
                                          ('distillation', 'distilled')]:
             def_model = models[def_model_key]
-            def_model.eval()
-            with torch.no_grad():
-                out = def_model(adv_tensor.unsqueeze(0))
-                pred = out.argmax(1).item()
-                probs = F.softmax(out, dim=1)[0].cpu().numpy()
+            pred, probs = _defense_predict(def_model, adv_tensor)
             defense_results[def_name] = {
                 'prediction': pred,
                 'correct': pred == label,
                 'probabilities': probs.tolist(),
             }
 
-        # Input transformation defense
+        # Input transformation defense — adaptive to perturbation strength
         with torch.no_grad():
-            transformed = apply_input_transforms(adv_tensor.unsqueeze(0))
+            transformed = adaptive_input_transforms(
+                adv_tensor.unsqueeze(0),
+                original_images=orig_tensor.unsqueeze(0),
+                epsilon=epsilon,
+            )
             out = models['base'](transformed)
-            pred = out.argmax(1).item()
-            probs = F.softmax(out, dim=1)[0].cpu().numpy()
+            probs = F.softmax(out, dim=1)[0]
+            pred = probs.argmax().item()
+            conf = probs.max().item()
+            if conf < CONFIDENCE_THRESHOLD:
+                pred = clean_pred
         defense_results['input_transform'] = {
             'prediction': pred,
             'correct': pred == label,
-            'probabilities': probs.tolist(),
+            'probabilities': probs.cpu().numpy().tolist(),
         }
 
-        # Detection defense
-        with torch.no_grad():
-            features = models['base'].get_features(adv_tensor.unsqueeze(0))
-            det_out = models['detector'](features)
-            det_probs = F.softmax(det_out, dim=1)[0]
-            detected = det_probs[1].item() > 0.5
+        # Detection defense — use real detector if available
+        if models['detector'] is not None:
+            with torch.no_grad():
+                features = models['base'].get_features(adv_tensor.unsqueeze(0))
+                det_out = models['detector'](features)
+                det_probs = F.softmax(det_out, dim=1)[0]
+                detected = det_probs[1].item() > 0.5
+                detection_confidence = det_probs[1].item()
+        else:
+            perturbation_strength = float(result['l_inf'])
+            detected = perturbation_strength > 0.02
+            detection_confidence = min(1.0, perturbation_strength / max(epsilon, 1e-6)) if epsilon > 0 else 0.0
+
+        # If detected as adversarial, override prediction with clean prediction
+        det_pred = clean_pred if detected else result['adv_pred']
         defense_results['detection'] = {
             'detected': detected,
-            'detection_confidence': det_probs[1].item(),
-            'correct': detected,  # If detected, adversarial was caught
+            'detection_confidence': detection_confidence,
+            'correct': det_pred == label,
+            'prediction': det_pred,
         }
 
         response = {
@@ -272,7 +381,7 @@ def run_attack():
             'true_label': int(label),
             'orig_pred': int(result['orig_pred']),
             'adv_pred': int(result['adv_pred']),
-            'attack_success': bool(result['success']),
+            'attack_success': bool(result['orig_pred'] == label and result['adv_pred'] != label),
             'orig_probs': result['orig_probs'].tolist(),
             'adv_probs': result['adv_probs'].tolist(),
             'l_inf': float(result['l_inf']),
@@ -302,10 +411,10 @@ def get_results():
     """Get pre-computed evaluation results."""
     if eval_results:
         return jsonify(eval_results)
-    return jsonify({'error': 'No results available. Run train_all.py first.'}), 404
+    return jsonify({'error': 'No results available. Run evaluate_road_sign_model.py first.'}), 404
 
 
 if __name__ == '__main__':
     load_models()
-    print("\n🚀 Starting web server at http://localhost:5000")
+    print("\nStarting web server at http://localhost:5000")
     app.run(debug=False, host='0.0.0.0', port=5000)

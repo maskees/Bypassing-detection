@@ -39,6 +39,15 @@ def pgd_attack(model, images, labels, epsilon, alpha=None, steps=40, device='cud
     images = images.clone().detach().to(device)
     labels = labels.clone().detach().to(device)
 
+    # At higher epsilon, use targeted attack toward a random wrong class
+    use_targeted = epsilon > 0.05
+    if use_targeted:
+        num_classes = model(images[:1]).shape[1]
+        target_labels = torch.zeros_like(labels)
+        for i in range(labels.size(0)):
+            choices = [c for c in range(num_classes) if c != labels[i].item()]
+            target_labels[i] = choices[torch.randint(len(choices), (1,)).item()]
+
     # Random initialization within ε-ball
     adv_images = images.clone().detach()
     adv_images = adv_images + torch.empty_like(adv_images).uniform_(-epsilon, epsilon)
@@ -48,7 +57,10 @@ def pgd_attack(model, images, labels, epsilon, alpha=None, steps=40, device='cud
         adv_images.requires_grad_(True)
 
         outputs = model(adv_images)
-        loss = F.cross_entropy(outputs, labels)
+        if use_targeted:
+            loss = -F.cross_entropy(outputs, target_labels)
+        else:
+            loss = F.cross_entropy(outputs, labels)
 
         model.zero_grad()
         loss.backward()
