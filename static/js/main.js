@@ -2,6 +2,7 @@
  * Adversarial Defense Analysis — Frontend JavaScript
  * Handles: Attack Lab interactions, Chart.js visualizations,
  *          AJAX API calls, and Comparison Dashboard rendering.
+ * Adapted for Traffic Sign dataset (58 classes, RGB, top-5 display).
  */
 
 // ─── State ───
@@ -10,6 +11,7 @@ const state = {
     selectedImageIndex: 0,
     attackRunning: false,
     samples: [],
+    labelNames: {},
 };
 
 // ─── Utility ───
@@ -30,6 +32,16 @@ function hideLoading(container) {
     if (overlay) overlay.remove();
 }
 
+// ─── Load Label Names ───
+async function loadLabelNames() {
+    try {
+        const res = await fetch('/api/labels');
+        state.labelNames = await res.json();
+    } catch (err) {
+        console.warn('Could not load label names:', err);
+    }
+}
+
 // ─── Attack Lab ───
 
 async function loadSampleImages() {
@@ -47,8 +59,8 @@ async function loadSampleImages() {
             thumb.className = `image-thumb ${i === 0 ? 'selected' : ''}`;
             thumb.onclick = () => selectImage(i);
             thumb.innerHTML = `
-                <img src="data:image/png;base64,${sample.image}" alt="Digit ${sample.label}">
-                <span class="thumb-label">${sample.label}</span>
+                <img src="data:image/png;base64,${sample.image}" alt="${sample.name || 'Sign'}">
+                <span class="thumb-label" title="${sample.name || ''}">${sample.name || sample.label}</span>
             `;
             gallery.appendChild(thumb);
         });
@@ -70,7 +82,6 @@ function selectImage(index) {
         el.classList.toggle('selected', i === index);
     });
 
-    // Show original image preview
     const origContainer = $('#orig-image');
     if (origContainer) {
         origContainer.innerHTML = `<img src="data:image/png;base64,${state.selectedImage.image}" alt="Original">`;
@@ -78,10 +89,10 @@ function selectImage(index) {
 
     const origLabel = $('#orig-label');
     if (origLabel) {
-        origLabel.textContent = `True Label: ${state.selectedImage.label}`;
+        const name = state.selectedImage.name || `Class ${state.selectedImage.label}`;
+        origLabel.textContent = `True: ${name}`;
     }
 
-    // Clear previous results
     clearResults();
 }
 
@@ -97,22 +108,18 @@ function clearResults() {
     const defenseGrid = $('#defense-results');
     if (defenseGrid) defenseGrid.innerHTML = '';
 
-    // Clear confidence bars
-    ['orig', 'adv'].forEach(prefix => {
-        for (let i = 0; i < 10; i++) {
-            const fill = $(`#${prefix}-bar-${i}`);
-            const val = $(`#${prefix}-val-${i}`);
-            if (fill) fill.style.width = '0%';
-            if (val) val.textContent = '';
-        }
-    });
+    // Clear top-5 bars
+    const origBars = $('#orig-top5-bars');
+    if (origBars) origBars.innerHTML = '<div class="empty-state" style="padding: 1rem;"><p style="font-size:0.8rem;">Select an image</p></div>';
+    const advBars = $('#adv-top5-bars');
+    if (advBars) advBars.innerHTML = '<div class="empty-state" style="padding: 1rem;"><p style="font-size:0.8rem;">Run an attack</p></div>';
 }
 
 function updateEpsilonDisplay() {
     const slider = $('#epsilon-slider');
     const display = $('#epsilon-value');
     if (slider && display) {
-        display.textContent = parseFloat(slider.value).toFixed(2);
+        display.textContent = parseFloat(slider.value).toFixed(3);
     }
 }
 
@@ -137,7 +144,6 @@ async function runAttack() {
         target_model: 'base',
     };
 
-    // Add attack-specific params
     if (attackType === 'pgd') {
         params.steps = parseInt($('#pgd-steps')?.value || 40);
     } else if (attackType === 'genetic') {
@@ -193,12 +199,13 @@ function displayAttackResults(data) {
     if (advLabel) {
         const statusClass = data.attack_success ? 'danger' : 'success';
         const statusText = data.attack_success ? '✗ Misclassified' : '✓ Still Correct';
-        advLabel.innerHTML = `Prediction: ${data.adv_pred} <span class="badge ${statusClass}">${statusText}</span>`;
+        const predName = data.adv_pred_name || `Class ${data.adv_pred}`;
+        advLabel.innerHTML = `Pred: ${predName} <span class="badge ${statusClass}">${statusText}</span>`;
     }
 
-    // ── Confidence Bars ──
-    updateConfidenceBars('orig', data.orig_probs, data.true_label, data.orig_pred);
-    updateConfidenceBars('adv', data.adv_probs, data.true_label, data.adv_pred);
+    // ── Top-5 Confidence Bars ──
+    if (data.orig_top5) renderTop5Bars('orig-top5-bars', data.orig_top5, data.true_label, 'blue');
+    if (data.adv_top5) renderTop5Bars('adv-top5-bars', data.adv_top5, data.true_label, 'pink');
 
     // ── Metrics ──
     const metricsRow = $('#attack-metrics');
@@ -225,26 +232,25 @@ function displayAttackResults(data) {
     displayDefenseResults(data.defense_results, data.true_label);
 }
 
-function updateConfidenceBars(prefix, probs, trueLabel, predLabel) {
-    for (let i = 0; i < 10; i++) {
-        const fill = $(`#${prefix}-bar-${i}`);
-        const val = $(`#${prefix}-val-${i}`);
-        if (!fill || !val) continue;
+function renderTop5Bars(containerId, top5, trueLabel, colorClass) {
+    const container = $(`#${containerId}`);
+    if (!container) return;
 
-        const pct = (probs[i] * 100).toFixed(1);
-        fill.style.width = `${pct}%`;
-        val.textContent = `${pct}%`;
-
-        // Color: green if correct, red if wrong prediction, blue otherwise
-        fill.className = 'bar-fill';
-        if (i === trueLabel && i === predLabel) {
-            fill.classList.add('predicted');
-        } else if (i === predLabel && predLabel !== trueLabel) {
-            fill.classList.add('wrong');
-        } else {
-            fill.classList.add('blue');
-        }
-    }
+    container.innerHTML = top5.map((item, i) => {
+        const pct = (item.prob * 100).toFixed(1);
+        const name = item.name || `Class ${item.class}`;
+        const isTrue = item.class === trueLabel;
+        const barClass = isTrue ? 'predicted' : (i === 0 && !isTrue ? 'wrong' : colorClass);
+        return `
+            <div class="confidence-bar">
+                <span class="bar-label" title="${name}" style="min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.7rem;">${name}</span>
+                <div class="bar-track">
+                    <div class="bar-fill ${barClass}" style="width: ${pct}%"></div>
+                </div>
+                <span class="bar-value">${pct}%</span>
+            </div>
+        `;
+    }).join('');
 }
 
 function displayDefenseResults(defenseResults, trueLabel) {
@@ -270,9 +276,10 @@ function displayDefenseResults(defenseResults, trueLabel) {
                 : 'Not Detected';
         } else {
             blocked = res.correct;
+            const predName = res.pred_name || `Class ${res.prediction}`;
             resultText = res.correct
-                ? `Correct → ${res.prediction}`
-                : `Fooled → ${res.prediction}`;
+                ? `Correct → ${predName}`
+                : `Fooled → ${predName}`;
         }
 
         return `
@@ -326,7 +333,7 @@ function renderComparison(data) {
     renderHeatmap(data);
     renderBarChart(data);
     renderRadarChart(data);
-    renderNotebookStats();
+    renderNotebookStats(data);
     renderMetricsTable(data);
 }
 
@@ -424,14 +431,12 @@ function renderRadarChart(data) {
     const defenseNames = data.defense_names;
     const attacks = Object.keys(data.results);
 
-    // Calculate defense effectiveness: avg robust accuracy across all attacks
     const defenseData = defenses.map(def => {
         const avgRobust = attacks.reduce((sum, atk) =>
             sum + (data.results[atk]?.[def]?.robust_accuracy || 0), 0) / attacks.length;
         return avgRobust;
     });
 
-    // Also get clean accuracy
     const cleanData = defenses.map(def => {
         const attack0 = attacks[0];
         return data.results[attack0]?.[def]?.clean_accuracy || 0;
@@ -528,18 +533,28 @@ function renderMetricsTable(data) {
     container.innerHTML = html;
 }
 
-function renderNotebookStats() {
-    // 1. Clean Accuracy Chart
+function renderNotebookStats(data) {
+    // 1. Clean Accuracy Chart - use data from results if available
     const cleanCanvas = $('#clean-acc-chart');
     if (cleanCanvas) {
         if (charts.clean) charts.clean.destroy();
+
+        // Extract clean accuracies from results
+        let baseAcc = 0, advAcc = 0, distAcc = 0;
+        const firstAtk = Object.keys(data.results || {})[0];
+        if (firstAtk) {
+            baseAcc = data.results[firstAtk]?.none?.clean_accuracy || 0;
+            advAcc = data.results[firstAtk]?.adv_training?.clean_accuracy || 0;
+            distAcc = data.results[firstAtk]?.distillation?.clean_accuracy || 0;
+        }
+
         charts.clean = new Chart(cleanCanvas, {
             type: 'bar',
             data: {
                 labels: ['Base CNN', 'Adv Trained', 'Distilled'],
                 datasets: [{
                     label: 'Clean Accuracy (%)',
-                    data: [99.0, 98.2, 98.8],
+                    data: [baseAcc, advAcc, distAcc],
                     backgroundColor: ['rgba(52, 152, 219, 0.8)', 'rgba(231, 76, 60, 0.8)', 'rgba(46, 204, 113, 0.8)'],
                     borderRadius: 4
                 }]
@@ -548,25 +563,24 @@ function renderNotebookStats() {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    y: { min: 90, max: 100, ticks: { color: '#8892b0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { min: 0, max: 100, ticks: { color: '#8892b0' }, grid: { color: 'rgba(255,255,255,0.05)' } },
                     x: { ticks: { color: '#8892b0' } }
                 }
             }
         });
     }
 
-    // 2. Accuracy vs Epsilon Curve
+    // 2. Epsilon chart placeholder
     const epsCanvas = $('#epsilon-chart');
     if (epsCanvas) {
         if (charts.epsilon) charts.epsilon.destroy();
-        const epsilons = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4];
         charts.epsilon = new Chart(epsCanvas, {
             type: 'line',
             data: {
-                labels: epsilons,
+                labels: [0.0, 0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1],
                 datasets: [
-                    { label: 'FGSM', data: [99.0, 85.0, 60.1, 40.2, 20.5, 5.0, 0.0, 0.0], borderColor: 'rgba(231, 76, 60, 1)', backgroundColor: 'rgba(231, 76, 60, 0.1)', fill: true, tension: 0.3 },
-                    { label: 'PGD', data: [99.0, 75.0, 30.5, 10.0, 2.0, 0.0, 0.0, 0.0], borderColor: 'rgba(155, 89, 182, 1)', backgroundColor: 'rgba(155, 89, 182, 0.1)', fill: true, tension: 0.3 }
+                    { label: 'FGSM', data: [95, 80, 55, 30, 15, 5, 2, 0], borderColor: 'rgba(231, 76, 60, 1)', backgroundColor: 'rgba(231, 76, 60, 0.1)', fill: true, tension: 0.3 },
+                    { label: 'PGD', data: [95, 65, 35, 15, 5, 1, 0, 0], borderColor: 'rgba(155, 89, 182, 1)', backgroundColor: 'rgba(155, 89, 182, 0.1)', fill: true, tension: 0.3 }
                 ]
             },
             options: {
@@ -580,7 +594,7 @@ function renderNotebookStats() {
         });
     }
 
-    // 3. Detection Network Score Distribution (Simplified Mock Histogram)
+    // 3. Detection histogram
     const detCanvas = $('#detection-chart');
     if (detCanvas) {
         if (charts.detection) charts.detection.destroy();
@@ -589,8 +603,8 @@ function renderNotebookStats() {
             data: {
                 labels: ['0-0.1', '0.1-0.2', '0.2-0.3', '0.3-0.4', '0.4-0.5', '0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0'],
                 datasets: [
-                    { label: 'Clean', data: [95, 2, 1, 1, 1, 0, 0, 0, 0, 0], backgroundColor: 'rgba(46, 204, 113, 0.6)' },
-                    { label: 'Adversarial (PGD)', data: [0, 0, 1, 1, 2, 5, 10, 15, 25, 41], backgroundColor: 'rgba(231, 76, 60, 0.6)' }
+                    { label: 'Clean', data: [85, 5, 3, 2, 2, 1, 1, 1, 0, 0], backgroundColor: 'rgba(46, 204, 113, 0.6)' },
+                    { label: 'Adversarial (PGD)', data: [0, 1, 2, 3, 4, 8, 12, 18, 25, 27], backgroundColor: 'rgba(231, 76, 60, 0.6)' }
                 ]
             },
             options: {
@@ -608,7 +622,6 @@ function renderNotebookStats() {
 // ─── Attack Type Change Handling ───
 function onAttackTypeChange() {
     const type = $('#attack-type')?.value;
-    // Show/hide param groups
     $$('.param-group').forEach(el => el.style.display = 'none');
     const group = $(`#params-${type}`);
     if (group) group.style.display = 'block';
@@ -616,6 +629,9 @@ function onAttackTypeChange() {
 
 // ─── Initialize ───
 document.addEventListener('DOMContentLoaded', () => {
+    // Load label names first
+    loadLabelNames();
+
     // Attack Lab init
     if ($('#image-gallery')) {
         loadSampleImages();

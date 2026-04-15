@@ -2,7 +2,7 @@
 {% set active_page = 'attack' %}
 
 {% block title %}Attack Lab — AdvDefense{% endblock %}
-{% block meta_description %}Interactive adversarial attack lab — run FGSM, PGD, Genetic Algorithm, and Differential Evolution attacks on MNIST{% endblock %}
+{% block meta_description %}Interactive adversarial attack lab — run FGSM, PGD, Genetic Algorithm, and Differential Evolution attacks on Traffic Signs{% endblock %}
 
 {% block content %}
 <div class="page-header fade-in">
@@ -33,8 +33,8 @@
             </div>
 
             <div class="form-group">
-                <label>Epsilon (ε) — Perturbation Bound <span class="range-value" id="epsilon-value">0.30</span></label>
-                <input type="range" id="epsilon-slider" min="0.05" max="0.5" step="0.01" value="0.30">
+                <label>Epsilon (ε) — Perturbation Bound <span class="range-value" id="epsilon-value">0.03</span></label>
+                <input type="range" id="epsilon-slider" min="0.005" max="0.1" step="0.005" value="0.03">
             </div>
 
             <!-- PGD params -->
@@ -76,7 +76,7 @@
                 <div class="card-icon purple">🖼</div>
                 <div>
                     <div class="card-title">Select Image</div>
-                    <div class="card-subtitle">Pick a test image from MNIST</div>
+                    <div class="card-subtitle">Pick a traffic sign image</div>
                 </div>
             </div>
             <div id="image-gallery" class="image-selector">
@@ -140,26 +140,18 @@
             <div class="metrics-row" id="attack-metrics"></div>
         </div>
 
-        <!-- Confidence Bars -->
+        <!-- Top-5 Predictions -->
         <div class="grid-2">
             <div class="card">
                 <div class="card-header">
                     <div class="card-icon blue">📊</div>
                     <div>
-                        <div class="card-title">Original Predictions</div>
+                        <div class="card-title">Original — Top 5 Predictions</div>
                         <div class="card-subtitle">Model confidence on clean input</div>
                     </div>
                 </div>
-                <div class="confidence-bars">
-                    {% for i in range(10) %}
-                    <div class="confidence-bar">
-                        <span class="bar-label">{{ i }}</span>
-                        <div class="bar-track">
-                            <div class="bar-fill blue" id="orig-bar-{{ i }}" style="width: 0%"></div>
-                        </div>
-                        <span class="bar-value" id="orig-val-{{ i }}"></span>
-                    </div>
-                    {% endfor %}
+                <div class="confidence-bars" id="orig-top5-bars">
+                    <div class="empty-state" style="padding: 1rem;"><p style="font-size:0.8rem;">Select an image</p></div>
                 </div>
             </div>
 
@@ -167,20 +159,12 @@
                 <div class="card-header">
                     <div class="card-icon pink">📊</div>
                     <div>
-                        <div class="card-title">Adversarial Predictions</div>
+                        <div class="card-title">Adversarial — Top 5 Predictions</div>
                         <div class="card-subtitle">Model confidence after attack</div>
                     </div>
                 </div>
-                <div class="confidence-bars">
-                    {% for i in range(10) %}
-                    <div class="confidence-bar">
-                        <span class="bar-label">{{ i }}</span>
-                        <div class="bar-track">
-                            <div class="bar-fill purple" id="adv-bar-{{ i }}" style="width: 0%"></div>
-                        </div>
-                        <span class="bar-value" id="adv-val-{{ i }}"></span>
-                    </div>
-                    {% endfor %}
+                <div class="confidence-bars" id="adv-top5-bars">
+                    <div class="empty-state" style="padding: 1rem;"><p style="font-size:0.8rem;">Run an attack</p></div>
                 </div>
             </div>
         </div>

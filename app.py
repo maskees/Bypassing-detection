@@ -49,9 +49,9 @@ def load_models():
     # Load label names
     try:
         label_names = load_label_names('data/labels.csv')
-        print(f"✓ Loaded {len(label_names)} class names")
+        print(f"[OK] Loaded {len(label_names)} class names")
     except Exception as e:
-        print(f"⚠ Could not load label names: {e}")
+        print(f"[WARN] Could not load label names: {e}")
         label_names = {i: f"Class {i}" for i in range(58)}
 
     # Base model
@@ -78,24 +78,24 @@ def load_models():
     detector.eval()
     models['detector'] = detector
 
-    print("✓ All models loaded")
+    print("[OK] All models loaded")
 
     # Load test dataset
     test_dataset = TrafficTestDataset(
         root_dir='data/traffic_Data/TEST',
         transform=TEST_TRANSFORM,
     )
-    print(f"✓ Test dataset: {len(test_dataset)} images")
+    print(f"[OK] Test dataset: {len(test_dataset)} images")
 
     # Load evaluation results
     results_path = 'results/evaluation_results.json'
     if os.path.exists(results_path):
         with open(results_path, 'r') as f:
             eval_results = json.load(f)
-        print("✓ Evaluation results loaded")
+        print("[OK] Evaluation results loaded")
     else:
         eval_results = None
-        print("⚠ No evaluation results found — run train_all.py first")
+        print("[WARN] No evaluation results found — run train_all.py first")
 
 
 def tensor_to_base64(tensor, amplify=1.0):

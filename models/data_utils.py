@@ -2,9 +2,9 @@
 Data loading utilities for Indian Traffic Sign dataset.
 
 Dataset structure:
-  data/traffic_Data/DATA/{class_id}/  — training images (ImageFolder)
-  data/traffic_Data/TEST/             — test images (flat, filenames encode class)
-  data/labels.csv                     — class ID → name mapping
+  data/traffic_Data/DATA/{class_id}/  -- training images (ImageFolder)
+  data/traffic_Data/TEST/             -- test images (flat, filenames encode class)
+  data/labels.csv                     -- class ID to name mapping
 """
 
 import os
@@ -109,7 +109,7 @@ def get_data_loaders(batch_size=64, num_workers=0):
     """Get both train and test loaders."""
     train_loader, train_dataset = get_train_loader(batch_size, num_workers)
     test_loader, test_dataset = get_test_loader(batch_size, num_workers)
-    print(f"✅ Traffic Sign dataset loaded")
+    print("[OK] Traffic Sign dataset loaded")
     print(f"   Training samples: {len(train_dataset):,}")
     print(f"   Test samples:     {len(test_dataset):,}")
     print(f"   Batch size:       {batch_size}")
