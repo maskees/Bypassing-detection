@@ -1,5 +1,6 @@
 """
 Flask Web Application — Interactive Dashboard for Adversarial Defense Analysis.
+Adapted for Indian Traffic Sign dataset (58 classes, RGB 32×32).
 
 Routes:
   /            — Dashboard home
@@ -12,7 +13,6 @@ Routes:
 
 import torch
 import torch.nn.functional as F
-from torchvision import datasets, transforms
 from flask import Flask, render_template, jsonify, request
 import numpy as np
 import base64
@@ -22,7 +22,8 @@ import os
 import time
 from PIL import Image
 
-from models.target_model import MNISTNet, DetectorNet
+from models.target_model import TrafficNet, DetectorNet
+from models.data_utils import TrafficTestDataset, TEST_TRANSFORM, load_label_names
 from attacks.fgsm import fgsm_attack_single
 from attacks.pgd import pgd_attack_single
 from attacks.genetic_attack import genetic_attack
@@ -36,28 +37,37 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 models = {}
 test_dataset = None
 eval_results = None
+label_names = {}
 
 
 def load_models():
     """Load all trained models."""
-    global models, test_dataset, eval_results
+    global models, test_dataset, eval_results, label_names
 
     print(f"Loading models on {device}...")
 
+    # Load label names
+    try:
+        label_names = load_label_names('data/labels.csv')
+        print(f"✓ Loaded {len(label_names)} class names")
+    except Exception as e:
+        print(f"⚠ Could not load label names: {e}")
+        label_names = {i: f"Class {i}" for i in range(58)}
+
     # Base model
-    base = MNISTNet().to(device)
+    base = TrafficNet().to(device)
     base.load_state_dict(torch.load('saved_models/base_model.pth', map_location=device, weights_only=True))
     base.eval()
     models['base'] = base
 
     # Adversarially trained model
-    adv = MNISTNet().to(device)
+    adv = TrafficNet().to(device)
     adv.load_state_dict(torch.load('saved_models/adv_trained_model.pth', map_location=device, weights_only=True))
     adv.eval()
     models['adv_trained'] = adv
 
     # Distilled model
-    distilled = MNISTNet().to(device)
+    distilled = TrafficNet().to(device)
     distilled.load_state_dict(torch.load('saved_models/distilled_model.pth', map_location=device, weights_only=True))
     distilled.eval()
     models['distilled'] = distilled
@@ -71,9 +81,10 @@ def load_models():
     print("✓ All models loaded")
 
     # Load test dataset
-    transform = transforms.Compose([transforms.ToTensor()])
-    test_dataset = datasets.MNIST(root='./data', train=False,
-                                  download=True, transform=transform)
+    test_dataset = TrafficTestDataset(
+        root_dir='data/traffic_Data/TEST',
+        transform=TEST_TRANSFORM,
+    )
     print(f"✓ Test dataset: {len(test_dataset)} images")
 
     # Load evaluation results
@@ -88,27 +99,43 @@ def load_models():
 
 
 def tensor_to_base64(tensor, amplify=1.0):
-    """Convert a tensor image to base64-encoded PNG."""
-    if tensor.dim() == 3:
-        tensor = tensor.squeeze(0)   # Remove channel dim for grayscale
+    """Convert a tensor image to base64-encoded PNG. Handles RGB (3ch)."""
+    img = tensor.detach().cpu()
 
-    img_np = (tensor.detach().cpu().numpy() * amplify).clip(0, 1)
-    img_np = (img_np * 255).astype(np.uint8)
-    pil_img = Image.fromarray(img_np, mode='L')
+    if img.dim() == 4:
+        img = img.squeeze(0)
+
+    # img is (C, H, W) — C=3 for RGB or C=1 for grayscale
+    if img.shape[0] == 3:
+        # RGB
+        img_np = (img.numpy() * amplify).clip(0, 1)
+        img_np = (img_np * 255).astype(np.uint8)
+        img_np = np.transpose(img_np, (1, 2, 0))  # HWC
+        pil_img = Image.fromarray(img_np, mode='RGB')
+    else:
+        # Grayscale
+        img_np = (img.squeeze(0).numpy() * amplify).clip(0, 1)
+        img_np = (img_np * 255).astype(np.uint8)
+        pil_img = Image.fromarray(img_np, mode='L')
+
     pil_img = pil_img.resize((140, 140), Image.NEAREST)
-
     buffer = io.BytesIO()
     pil_img.save(buffer, format='PNG')
     return base64.b64encode(buffer.getvalue()).decode('utf-8')
 
 
 def perturbation_to_base64(tensor):
-    """Convert perturbation tensor to visible base64 image (amplified + colorized)."""
-    if tensor.dim() == 3:
-        tensor = tensor.squeeze(0)
+    """Convert perturbation tensor to visible base64 image (amplified)."""
+    img = tensor.detach().cpu()
+    if img.dim() == 4:
+        img = img.squeeze(0)
 
-    pert_np = tensor.detach().cpu().numpy()
-    # Normalize to [0, 1] for visualization
+    # Average across channels for display
+    if img.shape[0] == 3:
+        pert_np = img.mean(dim=0).numpy()
+    else:
+        pert_np = img.squeeze(0).numpy()
+
     abs_max = max(abs(pert_np.min()), abs(pert_np.max()), 1e-8)
     normalized = (pert_np / abs_max + 1) / 2  # Map [-1,1] to [0,1]
     img_np = (normalized * 255).astype(np.uint8)
@@ -139,6 +166,12 @@ def compare_page():
 
 # ── API Routes ──
 
+@app.route('/api/labels')
+def get_labels():
+    """Get class label names."""
+    return jsonify(label_names)
+
+
 @app.route('/api/images', methods=['GET'])
 def get_sample_images():
     """Get sample test images for the Attack Lab."""
@@ -148,9 +181,11 @@ def get_sample_images():
     samples = []
     for idx in indices:
         image, label = test_dataset[int(idx)]
+        name = label_names.get(label, f"Class {label}")
         samples.append({
             'index': int(idx),
             'label': int(label),
+            'name': name,
             'image': tensor_to_base64(image),
         })
 
@@ -169,11 +204,18 @@ def get_image(idx):
         probs = F.softmax(output, dim=1)[0].cpu().numpy()
         pred = output.argmax(1).item()
 
+    # Get top-5 predictions
+    top5_idx = np.argsort(probs)[-5:][::-1]
+    top5 = [{'class': int(i), 'name': label_names.get(int(i), f"Class {i}"),
+             'prob': float(probs[i])} for i in top5_idx]
+
     return jsonify({
         'index': idx,
         'label': int(label),
+        'label_name': label_names.get(int(label), f"Class {label}"),
         'prediction': pred,
-        'probabilities': probs.tolist(),
+        'pred_name': label_names.get(pred, f"Class {pred}"),
+        'top5': top5,
         'image': tensor_to_base64(image),
     })
 
@@ -183,7 +225,7 @@ def run_attack():
     """Run a single adversarial attack."""
     data = request.json
     attack_type = data.get('attack_type', 'fgsm')
-    epsilon = float(data.get('epsilon', 0.3))
+    epsilon = float(data.get('epsilon', 0.03))
     image_idx = int(data.get('image_index', 0))
     target_model_key = data.get('target_model', 'base')
 
@@ -228,10 +270,13 @@ def run_attack():
                 out = def_model(adv_tensor.unsqueeze(0))
                 pred = out.argmax(1).item()
                 probs = F.softmax(out, dim=1)[0].cpu().numpy()
+            top5_idx = np.argsort(probs)[-5:][::-1]
             defense_results[def_name] = {
                 'prediction': pred,
+                'pred_name': label_names.get(pred, f"Class {pred}"),
                 'correct': pred == label,
-                'probabilities': probs.tolist(),
+                'top5': [{'class': int(i), 'name': label_names.get(int(i), ''),
+                          'prob': float(probs[i])} for i in top5_idx],
             }
 
         # Input transformation defense
@@ -240,10 +285,13 @@ def run_attack():
             out = models['base'](transformed)
             pred = out.argmax(1).item()
             probs = F.softmax(out, dim=1)[0].cpu().numpy()
+        top5_idx = np.argsort(probs)[-5:][::-1]
         defense_results['input_transform'] = {
             'prediction': pred,
+            'pred_name': label_names.get(pred, f"Class {pred}"),
             'correct': pred == label,
-            'probabilities': probs.tolist(),
+            'top5': [{'class': int(i), 'name': label_names.get(int(i), ''),
+                      'prob': float(probs[i])} for i in top5_idx],
         }
 
         # Detection defense
@@ -255,19 +303,32 @@ def run_attack():
         defense_results['detection'] = {
             'detected': detected,
             'detection_confidence': det_probs[1].item(),
-            'correct': detected,  # If detected, adversarial was caught
+            'correct': detected,
         }
+
+        # Get top-5 for orig and adv
+        orig_probs = result['orig_probs']
+        adv_probs = result['adv_probs']
+        orig_top5 = [{'class': int(i), 'name': label_names.get(int(i), ''),
+                       'prob': float(orig_probs[i])}
+                      for i in np.argsort(orig_probs)[-5:][::-1]]
+        adv_top5 = [{'class': int(i), 'name': label_names.get(int(i), ''),
+                      'prob': float(adv_probs[i])}
+                     for i in np.argsort(adv_probs)[-5:][::-1]]
 
         response = {
             'success': True,
             'attack_type': attack_type,
             'epsilon': epsilon,
             'true_label': int(label),
+            'true_label_name': label_names.get(int(label), f"Class {label}"),
             'orig_pred': int(result['orig_pred']),
+            'orig_pred_name': label_names.get(int(result['orig_pred']), ''),
             'adv_pred': int(result['adv_pred']),
+            'adv_pred_name': label_names.get(int(result['adv_pred']), ''),
             'attack_success': bool(result['success']),
-            'orig_probs': result['orig_probs'].tolist(),
-            'adv_probs': result['adv_probs'].tolist(),
+            'orig_top5': orig_top5,
+            'adv_top5': adv_top5,
             'l_inf': float(result['l_inf']),
             'l2': float(result['l2']),
             'time': round(elapsed, 3),

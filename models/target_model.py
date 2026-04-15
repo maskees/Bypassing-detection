@@ -1,23 +1,28 @@
 """
-Neural network architectures for MNIST classification and adversarial detection.
+Neural network architectures for Traffic Sign classification and adversarial detection.
+Adapted from MNIST to Indian Traffic Sign Recognition dataset (58 classes, RGB 32x32).
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+NUM_CLASSES = 58
+IMG_SIZE = 32  # We resize all traffic sign images to 32x32
+IN_CHANNELS = 3  # RGB
 
-class MNISTNet(nn.Module):
+
+class TrafficNet(nn.Module):
     """
-    CNN for MNIST digit classification.
+    CNN for Traffic Sign classification.
     Architecture: 4 conv layers + 2 FC layers with BatchNorm and Dropout.
-    Achieves ~99% accuracy on clean MNIST test set.
+    Input: 3×32×32 RGB images | Output: 58 classes
     """
 
-    def __init__(self, num_classes=10):
-        super(MNISTNet, self).__init__()
-        # Block 1: 1 -> 32 channels
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
+    def __init__(self, num_classes=NUM_CLASSES):
+        super(TrafficNet, self).__init__()
+        # Block 1: 3 -> 32 channels
+        self.conv1 = nn.Conv2d(IN_CHANNELS, 32, 3, padding=1)
         self.bn1 = nn.BatchNorm2d(32)
         self.conv2 = nn.Conv2d(32, 32, 3, padding=1)
         self.bn2 = nn.BatchNorm2d(32)
@@ -32,8 +37,8 @@ class MNISTNet(nn.Module):
         self.dropout_conv = nn.Dropout(0.25)
         self.dropout_fc = nn.Dropout(0.5)
 
-        # After 2 pools: 28->14->7, channels=64 → 64*7*7=3136
-        self.fc1 = nn.Linear(64 * 7 * 7, 256)
+        # After 2 pools: 32->16->8, channels=64 → 64*8*8=4096
+        self.fc1 = nn.Linear(64 * 8 * 8, 256)
         self.fc2 = nn.Linear(256, num_classes)
 
     def forward(self, x):
@@ -76,11 +81,11 @@ class MNISTNet(nn.Module):
 class DetectorNet(nn.Module):
     """
     Binary classifier to detect adversarial examples.
-    Takes feature vectors from MNISTNet.get_features() as input.
+    Takes feature vectors from TrafficNet.get_features() as input.
     Outputs 2 classes: [clean, adversarial].
     """
 
-    def __init__(self, input_dim=64 * 7 * 7):
+    def __init__(self, input_dim=64 * 8 * 8):
         super(DetectorNet, self).__init__()
         self.fc1 = nn.Linear(input_dim, 256)
         self.bn1 = nn.BatchNorm1d(256)
@@ -96,3 +101,7 @@ class DetectorNet(nn.Module):
         x = self.dropout(x)
         x = self.fc3(x)
         return x
+
+
+# Backward-compatible alias
+MNISTNet = TrafficNet

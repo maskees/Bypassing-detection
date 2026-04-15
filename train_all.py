@@ -1,9 +1,9 @@
 """
-Master Training Script — Trains all models and runs evaluation.
+Master Training Script — Trains all models on Traffic Sign data and runs evaluation.
 
 Pipeline:
-  1. Download MNIST dataset
-  2. Train base CNN model (~99% accuracy)
+  1. Load Traffic Sign dataset (58 classes, RGB 32x32)
+  2. Train base CNN model
   3. Train adversarially robust model (with PGD adversarial training)
   4. Train distilled model (teacher→student with temperature scaling)
   5. Train detection network (binary classifier on features)
@@ -17,12 +17,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torchvision import datasets, transforms
 import os
 import json
 import time
 
-from models.target_model import MNISTNet, DetectorNet
+from models.target_model import TrafficNet, DetectorNet
+from models.data_utils import get_data_loaders, load_label_names
 from defenses.adversarial_training import train_adversarial_model
 from defenses.defensive_distillation import train_distilled_model
 from defenses.detection_network import train_detector
@@ -37,85 +37,6 @@ def get_device():
         device = 'cpu'
         print("Using CPU (training will be slower)")
     return device
-
-
-def get_data_loaders(batch_size=128):
-    """Download MNIST and create data loaders."""
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-    ])
-
-    train_dataset = datasets.MNIST(
-        root='./data', train=True, download=True, transform=transform
-    )
-    test_dataset = datasets.MNIST(
-        root='./data', train=False, download=True, transform=transform
-    )
-
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, num_workers=2
-    )
-
-    print(f"MNIST loaded: {len(train_dataset)} train, {len(test_dataset)} test")
-    return train_loader, test_loader
-
-
-def train_base_model(train_loader, test_loader, epochs=5, lr=0.001, device='cuda'):
-    """Train the base MNIST classifier."""
-    print("\n" + "=" * 50)
-    print("STEP 1: Training Base Model")
-    print("=" * 50)
-
-    model = MNISTNet().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
-
-    for epoch in range(epochs):
-        model.train()
-        total_loss = 0
-        correct = 0
-        total = 0
-
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = F.cross_entropy(outputs, labels)
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item()
-            _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-
-        scheduler.step()
-
-        # Test accuracy
-        model.eval()
-        test_correct = 0
-        test_total = 0
-        with torch.no_grad():
-            for images, labels in test_loader:
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
-                _, predicted = outputs.max(1)
-                test_total += labels.size(0)
-                test_correct += predicted.eq(labels).sum().item()
-
-        train_acc = 100. * correct / total
-        test_acc = 100. * test_correct / test_total
-        avg_loss = total_loss / len(train_loader)
-
-        print(f"  Epoch {epoch+1}/{epochs} — Loss: {avg_loss:.4f}, "
-              f"Train: {train_acc:.2f}%, Test: {test_acc:.2f}%")
-
-    print(f"  ✓ Base model trained — Test accuracy: {test_acc:.2f}%")
-    return model
 
 
 def evaluate_model(model, test_loader, device='cuda', name="Model"):
@@ -144,10 +65,43 @@ def main():
     os.makedirs('results', exist_ok=True)
 
     # ── Load Data ──
-    train_loader, test_loader = get_data_loaders()
+    train_loader, test_loader, train_dataset, test_dataset = get_data_loaders(batch_size=64)
 
     # ── Step 1: Train Base Model ──
-    base_model = train_base_model(train_loader, test_loader, epochs=5, device=device)
+    print("\n" + "=" * 50)
+    print("STEP 1: Training Base Traffic Sign Model")
+    print("=" * 50)
+
+    base_model = TrafficNet().to(device)
+    optimizer = optim.Adam(base_model.parameters(), lr=0.001)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
+
+    for epoch in range(10):
+        base_model.train()
+        total_loss = 0
+        correct = 0
+        total = 0
+
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device)
+            optimizer.zero_grad()
+            outputs = base_model(images)
+            loss = F.cross_entropy(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+            _, predicted = outputs.max(1)
+            total += labels.size(0)
+            correct += predicted.eq(labels).sum().item()
+
+        scheduler.step()
+        train_acc = 100. * correct / total
+        avg_loss = total_loss / len(train_loader)
+        test_acc = evaluate_model(base_model, test_loader, device, "Base")
+        print(f"  Epoch {epoch+1}/10 — Loss: {avg_loss:.4f}, "
+              f"Train: {train_acc:.2f}%, Test: {test_acc:.2f}%")
+
     torch.save(base_model.state_dict(), 'saved_models/base_model.pth')
     print("  ✓ Saved: saved_models/base_model.pth")
 
@@ -156,7 +110,7 @@ def main():
     print("STEP 2: Adversarial Training Defense")
     print("=" * 50)
     adv_model = train_adversarial_model(
-        MNISTNet, train_loader, epsilon=0.3, alpha=0.01,
+        TrafficNet, train_loader, epsilon=0.03, alpha=0.007,
         pgd_steps=7, epochs=10, lr=0.001, device=device
     )
     torch.save(adv_model.state_dict(), 'saved_models/adv_trained_model.pth')
@@ -169,7 +123,7 @@ def main():
     print("=" * 50)
     distilled_model = train_distilled_model(
         teacher_model=base_model,
-        model_class=MNISTNet,
+        model_class=TrafficNet,
         train_loader=train_loader,
         temperature=20.0,
         alpha=0.7,
@@ -190,7 +144,7 @@ def main():
         target_model=base_model,
         detector_model=detector,
         train_loader=train_loader,
-        epsilon=0.3,
+        epsilon=0.03,
         epochs=10,
         lr=0.001,
         device=device
@@ -202,7 +156,6 @@ def main():
     print("\n" + "=" * 50)
     print("STEP 5: Full Evaluation (4 attacks × 5 defenses)")
     print("=" * 50)
-    print("  Note: EC attacks (GA, DE) are slower — evaluating on 50 samples")
 
     models_dict = {
         'base': base_model,
@@ -214,7 +167,7 @@ def main():
     results = run_full_evaluation(
         models_dict=models_dict,
         test_loader=test_loader,
-        epsilon=0.3,
+        epsilon=0.03,
         num_samples=50,
         device=device,
         save_path='results/evaluation_results.json'
@@ -222,15 +175,9 @@ def main():
 
     # ── Summary ──
     elapsed = time.time() - start_time
-    print("\n" + "=" * 50)
+    print(f"\n{'=' * 50}")
     print(f"TRAINING COMPLETE — Total time: {elapsed/60:.1f} minutes")
-    print("=" * 50)
-    print("\nSaved files:")
-    print("  • saved_models/base_model.pth")
-    print("  • saved_models/adv_trained_model.pth")
-    print("  • saved_models/distilled_model.pth")
-    print("  • saved_models/detector_model.pth")
-    print("  • results/evaluation_results.json")
+    print(f"{'=' * 50}")
     print("\nRun the web interface: python app.py")
 
 
