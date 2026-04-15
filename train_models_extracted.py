@@ -17,7 +17,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # Project imports
-from models.target_model import MNISTNet, DetectorNet
+from models.target_model import TrafficNet, DetectorNet
 from defenses.adversarial_training import train_adversarial_model
 from defenses.defensive_distillation import train_distilled_model
 from defenses.detection_network import train_detector
@@ -43,15 +43,25 @@ print(f"\nDevice: {DEVICE}")
 
 BATCH_SIZE = 128
 
+# ── Traffic Sign Dataset (ImageFolder) ──
+# Training: data/traffic_Data/DATA/ (58 subdirectories, one per class)
+# Test: data/traffic_Data/TEST/ (flat directory with class encoded in filename)
+
 transform = transforms.Compose([
+    transforms.Resize((32, 32)),
     transforms.ToTensor(),
 ])
 
-train_dataset = datasets.MNIST(
-    root='./data', train=True, download=True, transform=transform
+# Load training dataset from ImageFolder structure
+train_dataset = datasets.ImageFolder(
+    root='./data/traffic_Data/DATA',
+    transform=transform
 )
-test_dataset = datasets.MNIST(
-    root='./data', train=False, download=True, transform=transform
+
+# Load test dataset from ImageFolder structure
+test_dataset = datasets.ImageFolder(
+    root='./data/traffic_Data/TEST',
+    transform=transform
 )
 
 train_loader = torch.utils.data.DataLoader(
@@ -61,20 +71,25 @@ test_loader = torch.utils.data.DataLoader(
     test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2
 )
 
-print(f"✅ MNIST loaded")
-print(f"   Training samples: {len(train_dataset):,}")
-print(f"   Test samples:     {len(test_dataset):,}")
-print(f"   Batch size:       {BATCH_SIZE}")
-print(f"   Train batches:    {len(train_loader)}")
+print(f'✅ Road Sign Dataset Loaded')
+print(f'   Training samples: {len(train_dataset):,}')
+print(f'   Test samples:     {len(test_dataset):,}')
+print(f'   Number of classes: {len(train_dataset.classes)}')
+print(f'   Batch size:       {BATCH_SIZE}')
+print(f'   Train batches:    {len(train_loader)}')
+print(f'   Test batches:     {len(test_loader)}')
 
 # ── Visualize sample images ──
-fig, axes = plt.subplots(2, 8, figsize=(14, 4))
-fig.suptitle('Sample MNIST Images', fontsize=14, fontweight='bold')
+fig, axes = plt.subplots(2, 8, figsize=(16, 5))
+fig.suptitle('Sample Road Sign Images (Indian Traffic Signs)', fontsize=14, fontweight='bold')
 for i, ax in enumerate(axes.flat):
-    image, label = train_dataset[i]
-    ax.imshow(image.squeeze(), cmap='gray')
-    ax.set_title(f'{label}', fontsize=11)
-    ax.axis('off')
+    if i < len(train_dataset):
+        image, label = train_dataset[i]
+        # Convert tensor to PIL image for display
+        img_display = transforms.ToPILImage()(image)
+        ax.imshow(img_display)
+        ax.set_title(f'Class {label}', fontsize=10)
+        ax.axis('off')
 plt.tight_layout()
 plt.show()
 
@@ -99,12 +114,12 @@ BASE_EPOCHS = 5
 BASE_LR = 0.001
 
 print("=" * 55)
-print(" STEP 1: Training Base CNN Model")
+print(" STEP 1: Training Base CNN Model (TrafficNet)")
 print("=" * 55)
 print(f"  Epochs: {BASE_EPOCHS}  |  LR: {BASE_LR}  |  Device: {DEVICE}")
 print()
 
-base_model = MNISTNet().to(DEVICE)
+base_model = TrafficNet().to(DEVICE)
 optimizer = optim.Adam(base_model.parameters(), lr=BASE_LR)
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 
@@ -208,7 +223,7 @@ print()
 start_time = time.time()
 
 adv_model = train_adversarial_model(
-    MNISTNet, train_loader,
+    TrafficNet, train_loader,
     epsilon=ADV_EPSILON,
     alpha=ADV_ALPHA,
     pgd_steps=ADV_PGD_STEPS,
@@ -245,7 +260,7 @@ start_time = time.time()
 
 distilled_model = train_distilled_model(
     teacher_model=base_model,
-    model_class=MNISTNet,
+    model_class=TrafficNet,
     train_loader=train_loader,
     temperature=DISTILL_TEMPERATURE,
     alpha=DISTILL_ALPHA,
