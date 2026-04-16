@@ -245,6 +245,34 @@ class RoadSignCropDataset(Dataset):
         return result
 
 
+def load_records_imagefolder(root_dir, split="train"):
+    """Load records from an ImageFolder-style directory.
+
+    Expected structure:
+        root_dir/train/{crosswalk,speedlimit,stop,trafficlight}/*.png
+        root_dir/test/{crosswalk,speedlimit,stop,trafficlight}/*.png
+
+    Returns a list of RoadSignRecord with dummy bounding boxes
+    (full image, since images are already cropped).
+    """
+    split_dir = Path(root_dir) / split
+    records = []
+    for class_name in CLASS_NAMES:
+        class_dir = split_dir / class_name
+        if not class_dir.exists():
+            continue
+        label = CLASS_TO_IDX[class_name]
+        for img_path in sorted(class_dir.glob("*")):
+            if img_path.suffix.lower() in (".png", ".jpg", ".jpeg", ".bmp"):
+                records.append(RoadSignRecord(
+                    image_path=img_path,
+                    label=label,
+                    bbox=(0, 0, 224, 224),  # dummy — image is already cropped
+                ))
+    random.Random(42).shuffle(records)
+    return records
+
+
 def make_road_sign_datasets(
     annotations_dir="annotations",
     images_dir="images",
