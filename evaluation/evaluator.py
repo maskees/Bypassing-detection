@@ -285,5 +285,5 @@ def run_full_evaluation(models_dict, test_loader, epsilon=0.3,
     with open(save_path, 'w') as f:
         json.dump(output, f, indent=2)
 
-    print(f"\n✓ Results saved to {save_path}")
+    print(f"\nResults saved to {save_path}")
     return output
