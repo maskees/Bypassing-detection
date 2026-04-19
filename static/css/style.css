@@ -678,7 +678,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .confidence-bar .bar-label {
-    width: 20px;
+    width: 90px;
+    min-width: 90px;
     font-family: var(--font-mono);
     font-size: 0.75rem;
     font-weight: 600;

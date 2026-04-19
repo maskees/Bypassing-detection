@@ -33,6 +33,8 @@ from road_sign_data import (
     IMAGENET_STD,
     make_road_sign_crop_datasets,
     make_road_sign_datasets,
+    load_records_imagefolder,
+    RoadSignCropDataset,
 )
 from attacks.fgsm import fgsm_attack_single
 from attacks.pgd import pgd_attack_single
@@ -133,12 +135,21 @@ def load_models():
 
     print("App models loaded")
 
-    if using_crop_classifier:
+    # Prefer GTSRB test images (matches training distribution) if available
+    gtsrb_test_dir = "data/GTSRB_mapped"
+    if os.path.exists(gtsrb_test_dir):
+        gtsrb_records = load_records_imagefolder(gtsrb_test_dir, split="test")
+        val_dataset = RoadSignCropDataset(gtsrb_records, image_size=224,
+                                          augment=False, return_display=True)
+        print(f"Using GTSRB test dataset: {gtsrb_test_dir}")
+    elif using_crop_classifier:
         _, val_dataset = make_road_sign_crop_datasets(return_display=True)
+        print("Using original cropped dataset (annotations/images)")
     else:
         _, val_dataset = make_road_sign_datasets(return_display=True)
+        print("Using original full-image dataset")
     test_dataset = AppRoadSignDataset(val_dataset)
-    print(f"Road-sign validation dataset: {len(test_dataset)} images")
+    print(f"Validation dataset: {len(test_dataset)} images")
 
     results_path = 'results/evaluation_results.json'
     if os.path.exists(results_path):

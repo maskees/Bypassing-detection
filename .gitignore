@@ -2,3 +2,6 @@
 .vscode
 saved_models/*.pth
 results/*.json
+data/gtsrb_raw/
+_run_setup_gtsrb.py
+data/gtsrb_mapped/
