@@ -166,7 +166,7 @@ def evaluate_single_combination(attack_fn, model, images, labels, epsilon,
     return results
 
 
-def run_full_evaluation(models_dict, test_loader, epsilon=0.3,
+def run_full_evaluation(models_dict, test_loader, epsilon=0.03,
                         num_samples=100, device='cuda',
                         save_path='results/evaluation_results.json'):
     """

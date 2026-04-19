@@ -49,7 +49,8 @@ def parse_args():
     parser.add_argument('--detector-epochs', type=int, default=10, help='Epochs for detector training (default: 10)')
     parser.add_argument('--batch-size', type=int, default=128, help='Batch size (default: 128)')
     parser.add_argument('--eval-samples', type=int, default=50, help='Samples for evaluation matrix (default: 50)')
-    parser.add_argument('--epsilon', type=float, default=0.3, help='L-inf perturbation bound (default: 0.3)')
+    parser.add_argument('--epsilon', type=float, default=0.03, help='L-inf perturbation bound (default: 0.03)')
+    parser.add_argument('--num-workers', type=int, default=None, help='DataLoader workers (default: auto)')
     parser.add_argument('--skip-eval', action='store_true', help='Skip the evaluation step')
     parser.add_argument('--base-only', action='store_true', help='Train only the base model')
     return parser.parse_args()
@@ -277,6 +278,11 @@ def main():
         gpu_name = torch.cuda.get_device_name(0)
         gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
         print(f"🖥️  GPU: {gpu_name} ({gpu_mem:.1f} GB)")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+        torch.set_float32_matmul_precision('high')
+        print("⚡ CUDA optimizations enabled: TF32 + cuDNN benchmark")
     else:
         device = 'cpu'
         print("⚠️  Using CPU — training will be slower")
@@ -285,7 +291,7 @@ def main():
 
     # ── Load data ──
     train_loader, test_loader, train_dataset, test_dataset = get_data_loaders(
-        batch_size=args.batch_size, num_workers=2
+        batch_size=args.batch_size, num_workers=args.num_workers
     )
 
     # ── Step 1: Base model ──

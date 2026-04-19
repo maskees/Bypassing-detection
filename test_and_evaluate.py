@@ -27,8 +27,9 @@ from evaluation.evaluator import run_full_evaluation
 def parse_args():
     parser = argparse.ArgumentParser(description='Evaluate adversarial robustness of trained models.')
     parser.add_argument('--samples', type=int, default=50, help='Number of test samples (default: 50)')
-    parser.add_argument('--epsilon', type=float, default=0.3, help='L-inf perturbation bound (default: 0.3)')
+    parser.add_argument('--epsilon', type=float, default=0.03, help='L-inf perturbation bound (default: 0.03)')
     parser.add_argument('--batch-size', type=int, default=128, help='Batch size (default: 128)')
+    parser.add_argument('--num-workers', type=int, default=None, help='DataLoader workers (default: auto)')
     return parser.parse_args()
 
 
@@ -87,7 +88,7 @@ def main():
     }
 
     # ── Load test data ──
-    test_loader, test_dataset = get_test_loader(batch_size=args.batch_size, num_workers=2)
+    test_loader, test_dataset = get_test_loader(batch_size=args.batch_size, num_workers=args.num_workers)
     print(f"\n📊 Test dataset: {len(test_dataset)} images")
 
     # ── Clean accuracy ──

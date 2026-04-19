@@ -20,7 +20,13 @@ import io
 import json
 import os
 import time
+from typing import cast
 from PIL import Image
+
+try:
+    RESAMPLE_NEAREST = Image.Resampling.NEAREST
+except AttributeError:
+    RESAMPLE_NEAREST = 0
 
 from models.target_model import TrafficNet, DetectorNet
 from models.data_utils import TrafficTestDataset, TEST_TRANSFORM, load_label_names
@@ -38,6 +44,13 @@ models = {}
 test_dataset = None
 eval_results = None
 label_names = {}
+
+
+def ensure_initialized():
+    """Lazy-load models/dataset when app is imported by a WSGI server."""
+    global test_dataset
+    if not models or test_dataset is None:
+        load_models()
 
 
 def load_models():
@@ -118,7 +131,7 @@ def tensor_to_base64(tensor, amplify=1.0):
         img_np = (img_np * 255).astype(np.uint8)
         pil_img = Image.fromarray(img_np, mode='L')
 
-    pil_img = pil_img.resize((140, 140), Image.NEAREST)
+    pil_img = pil_img.resize((140, 140), RESAMPLE_NEAREST)
     buffer = io.BytesIO()
     pil_img.save(buffer, format='PNG')
     return base64.b64encode(buffer.getvalue()).decode('utf-8')
@@ -140,7 +153,7 @@ def perturbation_to_base64(tensor):
     normalized = (pert_np / abs_max + 1) / 2  # Map [-1,1] to [0,1]
     img_np = (normalized * 255).astype(np.uint8)
     pil_img = Image.fromarray(img_np, mode='L')
-    pil_img = pil_img.resize((140, 140), Image.NEAREST)
+    pil_img = pil_img.resize((140, 140), RESAMPLE_NEAREST)
 
     buffer = io.BytesIO()
     pil_img.save(buffer, format='PNG')
@@ -169,13 +182,20 @@ def compare_page():
 @app.route('/api/labels')
 def get_labels():
     """Get class label names."""
+    ensure_initialized()
     return jsonify(label_names)
 
 
 @app.route('/api/images', methods=['GET'])
 def get_sample_images():
     """Get sample test images for the Attack Lab."""
+    ensure_initialized()
+
+    if test_dataset is None:
+        return jsonify({'error': 'Test dataset is not available.'}), 500
+
     count = int(request.args.get('count', 10))
+    count = max(1, min(count, len(test_dataset)))
     indices = np.random.choice(len(test_dataset), count, replace=False)
 
     samples = []
@@ -195,10 +215,19 @@ def get_sample_images():
 @app.route('/api/image/<int:idx>')
 def get_image(idx):
     """Get a specific test image."""
+    ensure_initialized()
+
+    if test_dataset is None:
+        return jsonify({'error': 'Test dataset is not available.'}), 500
+
     if idx < 0 or idx >= len(test_dataset):
         return jsonify({'error': 'Invalid index'}), 400
 
     image, label = test_dataset[idx]
+    if not torch.is_tensor(image):
+        image = TEST_TRANSFORM(image)
+    image = cast(torch.Tensor, image)
+
     with torch.no_grad():
         output = models['base'](image.unsqueeze(0).to(device))
         probs = F.softmax(output, dim=1)[0].cpu().numpy()
@@ -223,6 +252,11 @@ def get_image(idx):
 @app.route('/api/attack', methods=['POST'])
 def run_attack():
     """Run a single adversarial attack."""
+    ensure_initialized()
+
+    if test_dataset is None:
+        return jsonify({'success': False, 'error': 'Test dataset is not available.'}), 500
+
     data = request.json
     attack_type = data.get('attack_type', 'fgsm')
     epsilon = float(data.get('epsilon', 0.03))
@@ -231,6 +265,10 @@ def run_attack():
 
     # Get image
     image, label = test_dataset[image_idx]
+    if not torch.is_tensor(image):
+        image = TEST_TRANSFORM(image)
+    image = cast(torch.Tensor, image)
+
     model = models.get(target_model_key, models['base'])
     model.eval()
 
@@ -354,6 +392,8 @@ def run_attack():
 @app.route('/api/results')
 def get_results():
     """Get pre-computed evaluation results."""
+    ensure_initialized()
+
     if eval_results:
         return jsonify(eval_results)
     return jsonify({'error': 'No results available. Run train_all.py first.'}), 404

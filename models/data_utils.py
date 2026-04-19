@@ -100,33 +100,50 @@ def load_label_names(csv_path='data/labels.csv'):
     return names
 
 
-def get_train_loader(batch_size=64, num_workers=0):
+def _resolve_num_workers(num_workers):
+    if num_workers is not None:
+        return num_workers
+    cpu_count = os.cpu_count() or 4
+    return max(2, min(12, cpu_count - 1))
+
+
+def get_train_loader(batch_size=64, num_workers=None):
     """Get training data loader using NumericImageFolder on DATA/."""
     train_dataset = NumericImageFolder(
         root='data/traffic_Data/DATA',
         transform=TRAIN_TRANSFORM,
     )
+    workers = _resolve_num_workers(num_workers)
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=True,
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=workers,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=workers > 0,
     )
     return train_loader, train_dataset
 
 
-def get_test_loader(batch_size=64, num_workers=0):
+def get_test_loader(batch_size=64, num_workers=None):
     """Get test data loader from flat TEST directory."""
     test_dataset = TrafficTestDataset(
         root_dir='data/traffic_Data/TEST',
         transform=TEST_TRANSFORM,
     )
+    workers = _resolve_num_workers(num_workers)
     test_loader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False,
-        num_workers=num_workers, pin_memory=True,
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=workers,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=workers > 0,
     )
     return test_loader, test_dataset
 
 
-def get_data_loaders(batch_size=64, num_workers=0):
+def get_data_loaders(batch_size=64, num_workers=None):
     """Get both train and test loaders."""
     train_loader, train_dataset = get_train_loader(batch_size, num_workers)
     test_loader, test_dataset = get_test_loader(batch_size, num_workers)
