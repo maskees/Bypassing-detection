@@ -43,7 +43,7 @@ def de_attack(model, image, label, epsilon, maxiter=100, popsize=15,
     start_time = time.time()
 
     image_dev = image.to(device)
-    img_shape = image.shape  # (1, 28, 28) for MNIST
+    img_shape = image.shape  
     C, H, W = img_shape
     queries = [0]  # Use list for mutability in closure
 
