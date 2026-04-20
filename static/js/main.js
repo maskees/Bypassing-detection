@@ -276,6 +276,27 @@ function displayDefenseResults(defenseResults, trueLabel) {
                 : `Fooled → ${CLASS_NAMES[res.prediction]}`;
         }
 
+        // Build mini confidence bars if probabilities exist
+        let miniBars = '';
+        const probs = res.probabilities;
+        if (probs && def.key !== 'detection') {
+            const predIdx = probs.indexOf(Math.max(...probs));
+            miniBars = '<div class="mini-confidence" style="margin-top:8px;width:100%">' +
+                CLASS_NAMES.map((cls, i) => {
+                    const pct = (probs[i] * 100).toFixed(1);
+                    let barClass = 'blue';
+                    if (i === trueLabel && i === predIdx) barClass = 'predicted';
+                    else if (i === predIdx && predIdx !== trueLabel) barClass = 'wrong';
+                    return `<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+                        <span style="width:70px;font-size:0.6rem;color:var(--text-tertiary);text-align:right">${cls}</span>
+                        <div style="flex:1;height:5px;background:var(--bg-input);border-radius:3px;overflow:hidden">
+                            <div class="bar-fill ${barClass}" style="height:100%;width:${pct}%;border-radius:3px"></div>
+                        </div>
+                        <span style="width:32px;font-size:0.6rem;color:var(--text-tertiary)">${pct}%</span>
+                    </div>`;
+                }).join('') + '</div>';
+        }
+
         return `
             <div class="card defense-card">
                 <div class="defense-status">${def.icon}</div>
@@ -284,6 +305,7 @@ function displayDefenseResults(defenseResults, trueLabel) {
                     ${blocked ? '✓ Blocked' : '✗ Bypassed'}
                 </div>
                 <div style="font-size:0.7rem;color:var(--text-tertiary);margin-top:6px">${resultText}</div>
+                ${miniBars}
             </div>
         `;
     }).join('');
