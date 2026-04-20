@@ -263,17 +263,31 @@ function displayDefenseResults(defenseResults, trueLabel) {
         const res = defenseResults[def.key];
         if (!res) return '';
 
-        let blocked, resultText;
+        let blocked, resultText, badgeClass, badgeText;
         if (def.key === 'detection') {
             blocked = res.detected;
             resultText = res.detected
                 ? `Detected (${(res.detection_confidence * 100).toFixed(0)}%)`
                 : 'Not Detected';
+            badgeClass = blocked ? 'blocked' : 'bypassed';
+            badgeText = blocked ? '✓ Blocked' : '✗ Bypassed';
         } else {
+            const maxConf = res.probabilities ? Math.max(...res.probabilities) : 1;
+            const lowConf = res.correct && maxConf < 0.6;
             blocked = res.correct;
             resultText = res.correct
-                ? `Correct → ${CLASS_NAMES[res.prediction]}`
+                ? `Correct → ${CLASS_NAMES[res.prediction]}` + (lowConf ? ` (${(maxConf * 100).toFixed(0)}%)` : '')
                 : `Fooled → ${CLASS_NAMES[res.prediction]}`;
+            if (!blocked) {
+                badgeClass = 'bypassed';
+                badgeText = '✗ Bypassed';
+            } else if (lowConf) {
+                badgeClass = 'weak-block';
+                badgeText = '⚠ Weak Block';
+            } else {
+                badgeClass = 'blocked';
+                badgeText = '✓ Blocked';
+            }
         }
 
         // Build mini confidence bars if probabilities exist
@@ -301,8 +315,8 @@ function displayDefenseResults(defenseResults, trueLabel) {
             <div class="card defense-card">
                 <div class="defense-status">${def.icon}</div>
                 <div class="defense-name">${def.name}</div>
-                <div class="defense-result ${blocked ? 'blocked' : 'bypassed'}">
-                    ${blocked ? '✓ Blocked' : '✗ Bypassed'}
+                <div class="defense-result ${badgeClass}">
+                    ${badgeText}
                 </div>
                 <div style="font-size:0.7rem;color:var(--text-tertiary);margin-top:6px">${resultText}</div>
                 ${miniBars}
