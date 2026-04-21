@@ -93,7 +93,7 @@ def build_data_loaders(batch_size, num_workers=2):
                               num_workers=num_workers, pin_memory=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
                             num_workers=num_workers, pin_memory=True)
-    print(f"Train samples: {len(train_ds)}, Val samples: {len(val_ds)}")
+    print(f"Train samples: {len(train_ds)}, Val samples: {len(val_ds)}", flush=True)
     return train_loader, val_loader
 
 
@@ -163,14 +163,14 @@ def evaluate(model, loader, device, epsilon_max=0.15):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=15)
-    parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--weight-decay', type=float, default=1e-5)
     parser.add_argument('--base-channels', type=int, default=32)
     parser.add_argument('--epsilon-max', type=float, default=0.15,
                         help="Max L_inf noise injected during training")
-    parser.add_argument('--clean-weight', type=float, default=0.2,
-                        help="Weight on clean-identity reconstruction loss")
+    parser.add_argument('--clean-weight', type=float, default=0.0,
+                        help="Weight on clean-identity reconstruction loss (0=off, saves VRAM)")
     parser.add_argument('--num-workers', type=int, default=2)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--output', type=str,
@@ -179,14 +179,14 @@ def main():
 
     set_seed(args.seed)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"Device: {device}")
+    print(f"Device: {device}", flush=True)
 
     train_loader, val_loader = build_data_loaders(args.batch_size, args.num_workers)
 
     model = DenoisingAutoencoder(base_channels=args.base_channels).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model: DenoisingAutoencoder(base_channels={args.base_channels}) "
-          f"— {n_params / 1e6:.2f}M params")
+          f"— {n_params / 1e6:.2f}M params", flush=True)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                   weight_decay=args.weight_decay)
@@ -197,7 +197,7 @@ def main():
 
     print("\n[Defense] Training Denoising Autoencoder")
     print(f"  epsilon_max={args.epsilon_max}, clean_weight={args.clean_weight}, "
-          f"epochs={args.epochs}, lr={args.lr}")
+          f"epochs={args.epochs}, lr={args.lr}", flush=True)
 
     for epoch in range(args.epochs):
         train_loss = train_one_epoch(
@@ -211,7 +211,8 @@ def main():
 
         print(f"  Epoch {epoch+1:02d}/{args.epochs} — "
               f"train_loss={train_loss:.5f} | "
-              f"val clean_mse={clean_mse:.5f} noisy_mse={noisy_mse:.5f} PSNR={psnr:.2f}dB")
+              f"val clean_mse={clean_mse:.5f} noisy_mse={noisy_mse:.5f} PSNR={psnr:.2f}dB",
+              flush=True)
 
         if psnr > best_psnr:
             best_psnr = psnr
@@ -227,10 +228,10 @@ def main():
                     'epoch': epoch + 1,
                 },
             }, args.output)
-            print(f"    Saved new best → {args.output}")
+            print(f"    Saved new best → {args.output}", flush=True)
 
-    print(f"\nTraining complete. Best PSNR: {best_psnr:.2f} dB")
-    print(f"Checkpoint: {args.output}")
+    print(f"\nTraining complete. Best PSNR: {best_psnr:.2f} dB", flush=True)
+    print(f"Checkpoint: {args.output}", flush=True)
 
 
 if __name__ == '__main__':
