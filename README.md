@@ -1,6 +1,6 @@
 # Bypassing Detection: Adversarial Attacks & Defenses on Road Sign Classifiers
 
-A comprehensive study evaluating the robustness of a deep learning road sign classifier against adversarial attacks. We implement **4 attack methods** and **5 defense strategies**, resulting in 20 unique attack-defense combinations — all visualized through an interactive web dashboard.
+A comprehensive study evaluating the robustness of a deep learning road sign classifier against adversarial attacks. We implement **4 attack methods** and **6 defense strategies**, resulting in 24 unique attack-defense combinations — all visualized through an interactive web dashboard.
 
 ---
 
@@ -26,6 +26,8 @@ Deep neural networks achieve near-perfect accuracy on road sign classification, 
 Image [0,1] → NormalizedModel → ResNet-34 → 4-class prediction
                                     ↓
                               512-dim features → DetectorNet → clean/adversarial
+
+Image [0,1] → DenoisingAutoencoder → Reconstructed [0,1] → NormalizedModel → ResNet-34
 ```
 
 - **Backbone:** ResNet-34 (ImageNet pretrained, fine-tuned on 4 road sign classes)
@@ -52,6 +54,7 @@ Image [0,1] → NormalizedModel → ResNet-34 → 4-class prediction
 | **Defensive Distillation** | Proactive | Teacher-student training with soft labels (T=20) |
 | **Input Transformation** | Preprocessing | Gaussian + median filtering to destroy adversarial noise |
 | **Detection Network** | Reactive | Binary classifier on 512-dim features (clean vs adversarial) |
+| **Autoencoder Denoise** | Generative | U-Net denoising autoencoder projects adversarial inputs back onto the clean-image manifold |
 
 ---
 
@@ -68,7 +71,8 @@ Bypassing-Detection/
 ├── models/
 │   ├── road_sign_classifier.py     # RoadSignClassifier + NormalizedModel
 │   ├── road_sign_model.py          # RoadSignResNet (with bbox head)
-│   └── target_model.py             # DetectorNet (adversarial detector)
+│   ├── target_model.py             # DetectorNet (adversarial detector)
+│   └── denoising_autoencoder.py    # U-Net denoising autoencoder
 │
 ├── attacks/
 │   ├── fgsm.py                     # FGSM attack
@@ -80,10 +84,11 @@ Bypassing-Detection/
 │   ├── adversarial_training.py     # Adversarial training defense
 │   ├── defensive_distillation.py   # Distillation defense
 │   ├── input_transformation.py     # Input transform defense
-│   └── detection_network.py        # Detection network defense
+│   ├── detection_network.py        # Detection network defense
+│   └── autoencoder_defense.py      # Autoencoder denoising defense
 │
 ├── evaluation/
-│   └── evaluator.py                # Full evaluation pipeline (4×5 matrix)
+│   └── evaluator.py                # Full evaluation pipeline (4×6 matrix)
 │
 ├── templates/                      # HTML templates for dashboard
 ├── static/                         # CSS/JS for dashboard
@@ -115,8 +120,14 @@ Run `train_models.ipynb` which executes 4 training stages:
 3. **Defensive distillation** — Teacher-student with T=20 (5 epochs)
 4. **Detection network** — Binary adversarial detector (5 epochs)
 
+### Train Autoencoder Defense
+```bash
+python train_autoencoder.py
+```
+Trains a U-Net denoising autoencoder on clean images with injected adversarial-like noise (15 epochs, ~minutes on GPU). Saves to `saved_models/road_sign_crop_autoencoder.pth`.
+
 ### Run Evaluation
-The final cell in `train_models.ipynb` runs the full 4×5 evaluation matrix and saves results to `results/evaluation_results.json`.
+The final cell in `train_models.ipynb` runs the full 4×6 evaluation matrix and saves results to `results/evaluation_results.json`.
 
 ### Launch Dashboard
 ```bash
@@ -136,8 +147,9 @@ Open `http://localhost:5000` in your browser.
 
 ### Attack Lab Features
 - Real-time adversarial image generation
-- Side-by-side original vs adversarial comparison
+- Side-by-side original vs adversarial vs reconstructed comparison
 - Perturbation visualization (magnified 5×)
+- Autoencoder reconstruction preview (denoised output)
 - Confidence bars for base model predictions
 - Defense effectiveness cards with per-defense confidence bars
 - Three-state defense badges: ✓ Blocked (green), ⚠ Weak Block (yellow), ✗ Bypassed (red)

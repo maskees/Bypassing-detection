@@ -89,8 +89,10 @@ function selectImage(index) {
 function clearResults() {
     const advContainer = $('#adv-image');
     const pertContainer = $('#pert-image');
+    const reconContainer = $('#recon-image');
     if (advContainer) advContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><p>Run an attack to see results</p></div>';
     if (pertContainer) pertContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>Perturbation will appear here</p></div>';
+    if (reconContainer) reconContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">🧠</div><p>Autoencoder output</p></div>';
 
     const metricsRow = $('#attack-metrics');
     if (metricsRow) metricsRow.innerHTML = '';
@@ -189,6 +191,24 @@ function displayAttackResults(data) {
     $('#adv-image').innerHTML = `<img src="data:image/png;base64,${data.adversarial_image}" alt="Adversarial">`;
     $('#pert-image').innerHTML = `<img src="data:image/png;base64,${data.perturbation_image}" alt="Perturbation">`;
 
+    // Reconstructed image (autoencoder output) — only if autoencoder is loaded
+    const reconContainer = $('#recon-image');
+    const reconSublabel = $('#recon-sublabel');
+    if (reconContainer) {
+        if (data.reconstructed_image) {
+            reconContainer.innerHTML = `<img src="data:image/png;base64,${data.reconstructed_image}" alt="Reconstructed">`;
+            const aeRes = data.defense_results && data.defense_results.autoencoder;
+            if (reconSublabel && aeRes) {
+                const statusClass = aeRes.correct ? 'success' : 'danger';
+                const statusText = aeRes.correct ? '✓ Correct' : '✗ Fooled';
+                reconSublabel.innerHTML = `Prediction: ${CLASS_NAMES[aeRes.prediction]} <span class="badge ${statusClass}">${statusText}</span>`;
+            }
+        } else {
+            reconContainer.innerHTML = '<div class="empty-state" style="padding:1rem;"><div class="empty-icon" style="font-size:2rem;">🧠</div><p style="font-size:0.7rem;">Autoencoder not loaded</p></div>';
+            if (reconSublabel) reconSublabel.textContent = 'Run: python train_autoencoder.py';
+        }
+    }
+
     // Labels
     const advLabel = $('#adv-label');
     if (advLabel) {
@@ -255,6 +275,7 @@ function displayDefenseResults(defenseResults, trueLabel) {
     const defenses = [
         { key: 'adv_training', name: 'Adversarial Training', icon: '🛡️' },
         { key: 'input_transform', name: 'Input Transform', icon: '🔄' },
+        { key: 'autoencoder', name: 'Autoencoder Denoise', icon: '🧠' },
         { key: 'detection', name: 'Detection Network', icon: '🔍' },
         { key: 'distillation', name: 'Distillation', icon: '🧪' },
     ];
@@ -266,11 +287,20 @@ function displayDefenseResults(defenseResults, trueLabel) {
         let blocked, resultText, badgeClass, badgeText;
         if (def.key === 'detection') {
             blocked = res.detected;
-            resultText = res.detected
-                ? `Detected (${(res.detection_confidence * 100).toFixed(0)}%)`
-                : 'Not Detected';
-            badgeClass = blocked ? 'blocked' : 'bypassed';
-            badgeText = blocked ? '✓ Blocked' : '✗ Bypassed';
+            const noAttack = !res.detected && res.detection_confidence === 0;
+            if (res.detected) {
+                resultText = `Detected (${(res.detection_confidence * 100).toFixed(0)}%)`;
+                badgeClass = 'blocked';
+                badgeText = '✓ Blocked';
+            } else if (noAttack) {
+                resultText = 'Attack had no effect';
+                badgeClass = 'no-attack';
+                badgeText = '— No Threat';
+            } else {
+                resultText = 'Not Detected';
+                badgeClass = 'bypassed';
+                badgeText = '✗ Bypassed';
+            }
         } else {
             const maxConf = res.probabilities ? Math.max(...res.probabilities) : 1;
             const lowConf = res.correct && maxConf < 0.6;

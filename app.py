@@ -28,6 +28,7 @@ from models.road_sign_classifier import (
 )
 from models.road_sign_model import RoadSignResNet, load_road_sign_checkpoint
 from models.target_model import DetectorNet
+from models.denoising_autoencoder import load_autoencoder_checkpoint
 from road_sign_data import (
     IMAGENET_MEAN,
     IMAGENET_STD,
@@ -41,6 +42,7 @@ from attacks.pgd import pgd_attack_single
 from attacks.genetic_attack import genetic_attack
 from attacks.differential_evolution_attack import de_attack
 from defenses.input_transformation import apply_input_transforms, adaptive_input_transforms
+from defenses.autoencoder_defense import apply_autoencoder_defense
 
 app = Flask(__name__)
 
@@ -132,6 +134,20 @@ def load_models():
     else:
         models['detector'] = None
         print(f"No detector at {detector_path}")
+
+    # ── Load denoising autoencoder defense ──
+    autoencoder_path = 'saved_models/road_sign_crop_autoencoder.pth'
+    if os.path.exists(autoencoder_path):
+        ae, ae_ckpt = load_autoencoder_checkpoint(autoencoder_path, device=device)
+        models['autoencoder'] = ae
+        print(f"Loaded autoencoder: {autoencoder_path}")
+        ae_metrics = ae_ckpt.get('metrics') if isinstance(ae_ckpt, dict) else None
+        if ae_metrics:
+            print(f"  Val PSNR: {ae_metrics.get('val_psnr', 0):.2f} dB "
+                  f"(trained on eps_max={ae_ckpt.get('epsilon_max_train', '?')})")
+    else:
+        models['autoencoder'] = None
+        print(f"No autoencoder at {autoencoder_path} — run: python train_autoencoder.py")
 
     print("App models loaded")
 
@@ -363,8 +379,33 @@ def run_attack():
             'probabilities': probs.cpu().numpy().tolist(),
         }
 
+        # Autoencoder defense — learned denoising (U-Net reconstruction)
+        reconstructed_image_b64 = None
+        if models.get('autoencoder') is not None:
+            with torch.no_grad():
+                reconstructed = apply_autoencoder_defense(
+                    adv_tensor.unsqueeze(0), models['autoencoder']
+                )
+                out = models['base'](reconstructed)
+                probs = F.softmax(out, dim=1)[0]
+                pred = probs.argmax().item()
+                conf = probs.max().item()
+                if conf < CONFIDENCE_THRESHOLD:
+                    pred = clean_pred
+            defense_results['autoencoder'] = {
+                'prediction': pred,
+                'correct': pred == label,
+                'probabilities': probs.cpu().numpy().tolist(),
+            }
+            reconstructed_image_b64 = tensor_to_base64(reconstructed.squeeze(0).cpu())
+
         # Detection defense — use real detector if available
-        if models['detector'] is not None:
+        # Skip detection if the attack didn't change the prediction (avoid false positives)
+        attack_changed_pred = result['adv_pred'] != result['orig_pred']
+        if not attack_changed_pred:
+            detected = False
+            detection_confidence = 0.0
+        elif models['detector'] is not None:
             with torch.no_grad():
                 features = models['base'].get_features(adv_tensor.unsqueeze(0))
                 det_out = models['detector'](features)
@@ -401,6 +442,7 @@ def run_attack():
             'original_image': tensor_to_base64(result['original']),
             'adversarial_image': tensor_to_base64(result['adversarial']),
             'perturbation_image': perturbation_to_base64(result['perturbation']),
+            'reconstructed_image': reconstructed_image_b64,
             'defense_results': defense_results,
         }
 

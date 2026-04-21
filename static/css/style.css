@@ -752,6 +752,11 @@ input[type="range"]::-webkit-slider-thumb {
     color: var(--accent-cyan);
 }
 
+.defense-card .defense-result.no-attack {
+    background: rgba(99, 145, 200, 0.15);
+    color: #6391c8;
+}
+
 .defense-card .defense-result.weak-block {
     background: rgba(251, 191, 36, 0.15);
     color: #fbbf24;

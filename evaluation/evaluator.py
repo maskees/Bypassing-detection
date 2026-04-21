@@ -24,6 +24,7 @@ from attacks.genetic_attack import genetic_attack
 from attacks.differential_evolution_attack import de_attack
 from defenses.input_transformation import apply_input_transforms
 from defenses.detection_network import detect_and_predict
+from defenses.autoencoder_defense import apply_autoencoder_defense
 
 
 def evaluate_single_combination(attack_fn, model, images, labels, epsilon,
@@ -49,6 +50,9 @@ def evaluate_single_combination(attack_fn, model, images, labels, epsilon,
         if defense_type == 'input_transform':
             transformed = apply_input_transforms(images)
             clean_out = model(transformed)
+        elif defense_type == 'autoencoder':
+            reconstructed = apply_autoencoder_defense(images, defense_extras['autoencoder'])
+            clean_out = model(reconstructed)
         elif defense_type == 'detection':
             detector = defense_extras['detector']
             clean_preds, _, _ = detect_and_predict(model, detector, images, device)
@@ -87,6 +91,8 @@ def evaluate_single_combination(attack_fn, model, images, labels, epsilon,
         with torch.no_grad():
             if defense_type == 'input_transform':
                 sub_out = model(apply_input_transforms(images[:ec_limit]))
+            elif defense_type == 'autoencoder':
+                sub_out = model(apply_autoencoder_defense(images[:ec_limit], defense_extras['autoencoder']))
             elif defense_type == 'detection':
                 sub_preds, _, _ = detect_and_predict(model, defense_extras['detector'], images[:ec_limit], device)
                 results['total_correct_clean'] = (sub_preds == labels[:ec_limit]).sum().item()
@@ -126,6 +132,10 @@ def evaluate_single_combination(attack_fn, model, images, labels, epsilon,
             transformed_adv = apply_input_transforms(adv_images)
             adv_out = model(transformed_adv)
             adv_preds = adv_out.argmax(dim=1)
+        elif defense_type == 'autoencoder':
+            reconstructed_adv = apply_autoencoder_defense(adv_images, defense_extras['autoencoder'])
+            adv_out = model(reconstructed_adv)
+            adv_preds = adv_out.argmax(dim=1)
         elif defense_type == 'detection':
             detector = defense_extras['detector']
             adv_preds, is_detected, _ = detect_and_predict(
@@ -143,6 +153,8 @@ def evaluate_single_combination(attack_fn, model, images, labels, epsilon,
             # Re-evaluate clean predictions with this model/defense
             if defense_type == 'input_transform':
                 clean_out2 = model(apply_input_transforms(images))
+            elif defense_type == 'autoencoder':
+                clean_out2 = model(apply_autoencoder_defense(images, defense_extras['autoencoder']))
             else:
                 clean_out2 = model(images)
             clean_preds2 = clean_out2.argmax(dim=1)
@@ -178,6 +190,7 @@ def run_full_evaluation(models_dict, test_loader, epsilon=0.3,
             'adv_trained': Adversarially trained model
             'distilled': Distilled model
             'detector': Detection network
+            'autoencoder': (optional) Denoising autoencoder
         test_loader: Test data loader
         epsilon: Attack epsilon
         num_samples: Number of test samples to evaluate
@@ -208,6 +221,13 @@ def run_full_evaluation(models_dict, test_loader, epsilon=0.3,
          {'type': 'detection', 'detector': models_dict['detector']}),
         ('distillation', 'Defensive Distillation', models_dict['distilled'], None),
     ]
+
+    # Add autoencoder defense if available
+    if models_dict.get('autoencoder') is not None:
+        defense_configs.append(
+            ('autoencoder', 'Autoencoder Denoise', models_dict['base'],
+             {'type': 'autoencoder', 'autoencoder': models_dict['autoencoder']}),
+        )
 
     # Collect test samples
     all_images, all_labels = [], []

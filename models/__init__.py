@@ -1,2 +1,3 @@
 from .target_model import DetectorNet
 from .road_sign_classifier import RoadSignClassifier, NormalizedModel, load_road_sign_classifier_checkpoint
+from .denoising_autoencoder import DenoisingAutoencoder, load_autoencoder_checkpoint
